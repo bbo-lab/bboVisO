@@ -4,6 +4,7 @@
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/bboVisO.iml" filepath="$PROJECT_DIR$/.idea/bboVisO.iml" />
       <module fileurl="file://$PROJECT_DIR$/../calibcam/.idea/calibcam.iml" filepath="$PROJECT_DIR$/../calibcam/.idea/calibcam.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../calibcamlib/.idea/calibcamlib.iml" filepath="$PROJECT_DIR$/../calibcamlib/.idea/calibcamlib.iml" />
     </modules>
   </component>
 </project>

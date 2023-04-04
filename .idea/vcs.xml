@@ -3,5 +3,6 @@
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../calibcam" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../calibcamlib" vcs="Git" />
   </component>
 </project>
