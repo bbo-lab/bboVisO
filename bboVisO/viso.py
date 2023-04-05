@@ -84,8 +84,18 @@ def infer_position_attitude(landmark_imcoords,  calibs, opts_optim, opts):
     return landmarks_opt, positions_opt, oris_flu_opt
 
 
-def align_results(landmarks_real, landmarks, positions, oris_flu):
+def align_results_by_landmarks(landmarks_real, landmarks, positions, oris_flu):
     rot, t, s = umeyama(landmarks, landmarks_real)
+    landmarks = landmarks @ rot.T * s + t
+    positions = positions @ rot.T * s + t
+    oris_flu = R.from_matrix(rot) * R.from_rotvec(oris_flu)
+
+    # Combine the 2 cameras (one will be nan)
+    return landmarks, positions, oris_flu
+
+
+def align_results_by_positions(positions_real, landmarks, positions, oris_flu):
+    rot, t, s = umeyama(positions, positions_real)
     landmarks = landmarks @ rot.T * s + t
     positions = positions @ rot.T * s + t
     oris_flu = R.from_matrix(rot) * R.from_rotvec(oris_flu)

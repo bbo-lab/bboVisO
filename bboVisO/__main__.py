@@ -29,7 +29,7 @@ landmark_imcoords, landmarks, positions, oris_flu = sim.get_simulated_data(calib
                                                                            opts,
                                                                            pertubation_deg=pertubation_deg,
                                                                            n_landmarks=8,
-                                                                           landmark_radius=15,
+                                                                           landmark_radius=50,
                                                                            traj_length=10,
                                                                            traj_start=(-5, 0, 0),
                                                                            traj_direction=(1, 0, 0),
@@ -51,9 +51,16 @@ landmarks_opt, positions_opt, oris_flu_opt = viso.infer_position_attitude(landma
                                                                           opts_optim, opts)
 
 # Realign result from position[0]-centered to landmark-centered
-landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results(landmarks,
-                                                                            landmarks_opt, positions_opt, oris_flu_opt)
+landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_landmarks(landmarks, landmarks_opt,
+                                                                                         positions_opt, oris_flu_opt)
 
-print(f"Max position error: {np.max(np.linalg.norm(positions - positions_aligned, axis=-1))}")
+print(f"Max position error (landmark alignment): {np.max(np.linalg.norm(positions - positions_aligned, axis=-1))}")
+print(f"Max landmark error (landmark alignment): {np.max(np.linalg.norm(landmarks - landmarks_aligned, axis=-1))}")
+
+landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_positions(positions, landmarks_opt,
+                                                                                         positions_opt, oris_flu_opt)
+
+print(f"Max position error (position alignment): {np.max(np.linalg.norm(positions - positions_aligned, axis=-1))}")
+print(f"Max landmark error (position alignment): {np.max(np.linalg.norm(landmarks - landmarks_aligned, axis=-1))}")
 
 pass
