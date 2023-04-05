@@ -16,18 +16,16 @@ import calibcam.helper_ag
 import matplotlib.pyplot as plt
 
 class TestJacobianReproClass(VisOTestCase):
-    def off_test_opt_jacobian(self):
-        ori_rotvecs = self.oris_flu.as_rotvec()
-        ori_rotvecs = np.where(ori_rotvecs == 0, 1e-10, ori_rotvecs)
-
+    def test_opt_jacobian(self):
         vars_free_opt, args_opt = viso.make_optim_input(self.calibs, self.opts, self.landmarks, self.positions,
-                                                        ori_rotvecs, landmark_imcoords=self.landmark_imcoords)
+                                                        self.oris_flu.as_rotvec(),
+                                                        landmark_imcoords=self.landmark_imcoords)
 
         args_opt["vars_full"] = np.where(args_opt["vars_full"] == 0, 1e-10, args_opt["vars_full"])
         vars_free_opt = np.where(vars_free_opt == 0, 1e-10, vars_free_opt)
 
-        print(
-            f"Jacobian check {check_jacobian(viso.objfun_repro_jacobian_wrapper, viso.objfun_repro_wrapper, vars_free_opt, args_opt)}")
+        print(f"Jacobian check" 
+              f"{check_jacobian(viso.objfun_repro_jacobian_wrapper, viso.objfun_repro_wrapper, vars_free_opt, args_opt)}")
 
     def test_rodrigues_as_rotmats_jacobian_zero(self):
         np.random.seed(0)

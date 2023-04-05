@@ -1,7 +1,10 @@
+import time
+
 import numpy as np
 import bboVisO.viso_ag as viso_ag
 from jax import jit, jacfwd as jacobian  # jacfwd is recommended for 'tall' jacobians_repro, jacrev for 'wide'
 from scipy.spatial.transform import Rotation as R
+from scipy.optimize import least_squares, OptimizeResult
 from calibcamlib.camerasystem import Camerasystem
 from bboVisO.geometry import umeyama
 
@@ -9,8 +12,76 @@ debug = False
 precalc = None
 
 
-def infer_position_attitude(landmark_vectors):
-    pass
+def infer_position_attitude(landmark_imcoords,  calibs, opts_optim, opts):
+    # Initializations, for alternating updates
+    landmarks_opt = None
+    positions_opt = None
+    oris_flu_opt = None
+    end_optim = False
+
+    # Previous positions for alternating update
+    positions_prev = np.full((landmark_imcoords.shape[1], 3), np.nan)
+
+    # Optimize all at once or alternate
+    optimize = [["oris", "positions", "landmarks"]]
+    # optimize = cycle(["oris", "positions", "landmarks"])  # Seems to converge to the same value
+
+    t = time.time()
+    precalc = get_precalc()
+    for opt in optimize:
+        # Always end with a full optimization
+        if end_optim:
+            opt = ["oris", "positions", "landmarks"]
+
+        # If we are doing a full optimization, increase to full step count steps
+        if isinstance(opt, list):
+            opts_optim["max_nfev"] = opts["optimization"]["max_nfev"]
+
+        # Run optimization
+        print(f"Optimizing {opt}")
+        vars_free, args = make_optim_input(calibs, opts, landmarks_opt, positions_opt, oris_flu_opt, optimize=opt,
+                                                precalc=precalc, landmark_imcoords=landmark_imcoords)
+
+        min_result: OptimizeResult = least_squares(objfun_repro_wrapper,
+                                                   vars_free,
+                                                   bounds=np.array([[-np.inf, np.inf]] * vars_free.size).T,
+                                                   args=[args],
+                                                   **opts_optim
+                                                   )
+
+        landmarks_opt, positions_opt, oris_flu_opt = unravel_vars(min_result.x, args)[:3]
+
+        if end_optim:
+            break
+
+        max_pos_shift = np.max(np.abs(positions_prev - positions_opt))
+        positions_prev = positions_opt
+
+        print(f"Max pos shift {max_pos_shift}")
+        if max_pos_shift < 1e-3:
+            end_optim = True
+
+    print(f"Optimization took {time.time() - t} s")
+
+    # Test for 3d optimization in postprocessing
+    # vars_free, args = viso.make_optim_input(calibs, opts, landmarks_opt, positions_opt, oris_flu_opt, optimize=opt,
+    #                                             precalc=precalc, landmark_imcoords=landmark_imcoords)
+    #
+    # min_result: OptimizeResult = least_squares(viso.objfun_3d_wrapper,
+    #                                            vars_free,
+    #                                            jac="2-point",
+    #                                            bounds=np.array([[-np.inf, np.inf]] * vars_free.size).T,
+    #                                            args=[args],
+    #                                            **opts_optim
+    #                                            )
+    #
+    # landmarks_opt, positions_opt, oris_flu_opt = viso.unravel_vars(min_result.x, args)[:3]
+    # landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results(landmarks,
+    #                                                                             landmarks_opt, positions_opt, oris_flu_opt)
+    #
+    # print(f"Max position error: {np.max(np.linalg.norm(positions-positions_aligned, axis=-1))}")
+
+    return landmarks_opt, positions_opt, oris_flu_opt
 
 
 def align_results(landmarks_real, landmarks, positions, oris_flu):
