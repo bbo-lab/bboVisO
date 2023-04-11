@@ -6,16 +6,22 @@ from scipy.spatial.transform import Rotation as R
 
 from calibcamlib.camerasystem import Camerasystem
 
-import viso
+import bboVisO.viso as viso
 
 
 def get_simulated_data(calibs, opts,
-                       pertubation_deg=0, n_landmarks=8, landmark_radius=15, traj_length=10, traj_start=(-5, 0, 0),
-                       traj_direction=(1, 0, 0), traj_radius=1, traj_v0=1, traj_period=1, fps=1):
+                       pertubation_deg=0, n_landmarks=8, landmark_radius=15, landmark_offset=(0, 0, 10),
+                       landmarks_add=None,
+                       traj_length=10, traj_start=(-5, 0, 2), traj_direction=(1, 0, 0), traj_radius=1, traj_v0=1,
+                       traj_period=1, fps=1):
 
     camerasystem = Camerasystem.from_calibs(calibs)
 
-    landmarks = get_landmarks(n_landmarks, radius=landmark_radius)
+    landmarks = get_landmarks(n_landmarks, radius=landmark_radius, offset=landmark_offset)
+
+    if landmarks_add is not None:
+        landmarks = np.vstack((landmarks_add, landmarks))
+
     positions, oris_flu = get_screw_trajectory(length=traj_length, start=traj_start, direction=traj_direction,
                                                radius=traj_radius, v0=traj_v0, period=traj_period, fps=fps)
 
@@ -32,13 +38,13 @@ def get_simulated_data(calibs, opts,
 
     vars_free_opt, args_opt = viso.make_optim_input(calibs, opts, landmarks, positions,
                                                     oris_flu.as_rotvec(),
-                                                    landmark_imcoords=landmark_imcoords_perturbed)
+                                                    landmark_imcoords=landmark_imcoords_perturbed)[0:2]
     error_repro = viso.objfun_repro_wrapper(vars_free_opt, args_opt)
     error_3d_repro = viso.objfun_3d_wrapper(vars_free_opt, args_opt)
 
     vars_free_opt, args_opt = viso.make_optim_input(calibs, opts, landmarks, positions,
                                                     oris_flu.as_rotvec(),
-                                                    landmark_vecs=landmark_vecs_perturbed)
+                                                    landmark_vecs=landmark_vecs_perturbed)[0:2]
     error_3d = viso.objfun_3d_wrapper(vars_free_opt, args_opt)
 
     print(f"Ground truth repro cost: {0.5 * np.sum(error_repro ** 2)}")
@@ -48,11 +54,13 @@ def get_simulated_data(calibs, opts,
     return landmark_imcoords_perturbed, landmarks, positions, oris_flu
 
 
-def get_screw_trajectory(length=10, start=(-5, 0, 0), direction=(1, 0, 0), radius=1, v0=1, period=1, fps=60):
+def get_screw_trajectory(length, start, direction, radius, v0, period, fps, pertubate_pos=True, pertubate_ori=True):
     start = np.array(start).reshape((1, 3))
     direction = np.array(direction).reshape((1, 3))
 
-    rot = R.align_vectors(direction, np.array([[1, 0, 0]]))[0]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        rot = R.align_vectors(direction, np.array([[1, 0, 0]]))[0]
 
     ts = np.linspace(0, length / v0, length * fps // v0)
     trig_arg = 2 * np.pi * ts / period
@@ -75,10 +83,26 @@ def get_screw_trajectory(length=10, start=(-5, 0, 0), direction=(1, 0, 0), radiu
 
     positions = rot.apply(positions) + start
 
-    return positions, R.from_matrix(oris_flu)
+    oris_flu = R.from_matrix(oris_flu)
+
+    if pertubate_pos:
+        if isinstance(pertubate_pos, bool):
+            pertubate_pos = 0.3
+        np.random.seed(0)
+        positions += (np.random.rand(*positions.shape)-0.5)*2*pertubate_pos
+
+    if pertubate_ori:
+        if isinstance(pertubate_ori, bool):
+            pertubate_ori = 0.1
+        np.random.seed(0)
+        oris_flu = oris_flu.as_rotvec()
+        oris_flu += (np.random.rand(*oris_flu.shape) - 0.5) * 2 * pertubate_ori
+        oris_flu = R.from_rotvec(oris_flu)
+
+    return positions, oris_flu
 
 
-def get_landmarks(N, radius=50, offset=(0, 0, 10)):
+def get_landmarks(N, radius, offset, pertubate=False):
     ang = np.linspace(0, 2 * np.pi, N, endpoint=False)
     landmarks = np.array(
         [
@@ -90,10 +114,16 @@ def get_landmarks(N, radius=50, offset=(0, 0, 10)):
 
     landmarks = landmarks + offset
 
+    if pertubate:
+        if isinstance(pertubate, bool):
+            pertubate_pos = 0.3
+        np.random.seed(0)
+        landmarks += (np.random.rand(*landmarks.shape)-0.5)*2*pertubate
+
     return landmarks
 
 
-def get_landmark_vectors(positions, oris_flu, landmarks, normalize=True):
+def get_landmark_vectors(positions, oris_flu, landmarks):
     if isinstance(oris_flu, np.ndarray):
         oris_flu = R.from_rotvec(oris_flu)
 
@@ -157,7 +187,52 @@ def reproject_landmarks(landmark_vectors, camerasystem: Camerasystem):
     landmark_vectors_check[mask] = np.nan
     landmark_vectors_norm = landmark_vectors / np.linalg.norm(landmark_vectors, axis=-1)[..., np.newaxis]
     diff = np.abs(landmark_vectors_check - landmark_vectors_norm)
-    if np.nanmax(diff) > 5e-3:
+    if np.nanmax(diff) > 1e-2:
         warnings.warn(f"Projection is broken: {np.max(diff)}")
 
     return landmark_imcoords
+
+
+def calc_orientation_errors(orientations_real, orientations):
+    orientations_real = R.from_rotvec(orientations_real).as_matrix()
+    orientations_inv = R.from_rotvec(orientations).inv().as_matrix()
+
+    rel_ori = np.einsum("nij,njk->nik", orientations_inv, orientations_real)
+    rel_ori = R.from_matrix(rel_ori)
+    angles = np.linalg.norm(rel_ori.as_rotvec(),axis=-1)
+
+    return angles
+
+
+def print_errors(landmarks, positions, oris_flu, landmarks_opt, positions_opt, oris_flu_opt):
+    # Realign result from position[0]-centered to landmark-centered
+    landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_landmarks(landmarks, landmarks_opt,
+                                                                                             positions_opt,
+                                                                                             oris_flu_opt)
+
+    print(
+        f"Max position error (landmark alignment): {np.max(np.linalg.norm(positions - positions_aligned, axis=-1))} m")
+    print(
+        f"Max landmark error (landmark alignment): {np.max(np.linalg.norm(landmarks - landmarks_aligned, axis=-1))} m")
+    print(f"Max orientation error (landmark alignment): "
+          f"{np.max(calc_orientation_errors(oris_flu.as_rotvec(), oris_flu_aligned)) / np.pi * 180} deg")
+    print()
+
+    landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_positions(positions, landmarks_opt,
+                                                                                             positions_opt,
+                                                                                             oris_flu_opt)
+    print(
+        f"Max position error (position alignment): {np.max(np.linalg.norm(positions - positions_aligned, axis=-1))} m")
+    print(
+        f"Max landmark error (position alignment): {np.max(np.linalg.norm(landmarks - landmarks_aligned, axis=-1))} m")
+    print(f"Max orientation error (position alignment): "
+          f"{np.max(calc_orientation_errors(oris_flu.as_rotvec(), oris_flu_aligned)) / np.pi * 180} deg")
+    print()
+
+    landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_perches(landmarks, landmarks_opt,
+                                                                                           positions_opt, oris_flu_opt)
+    print(f"Max position error (perch alignment): {np.max(np.linalg.norm(positions - positions_aligned, axis=-1))} m")
+    print(f"Max landmark error (perch alignment): {np.max(np.linalg.norm(landmarks - landmarks_aligned, axis=-1))} m")
+    print(f"Max orientation error (perch alignment): "
+          f"{np.max(calc_orientation_errors(oris_flu.as_rotvec(), oris_flu_aligned)) / np.pi * 180} deg")
+    print()

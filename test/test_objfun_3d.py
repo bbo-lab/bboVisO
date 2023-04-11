@@ -21,7 +21,7 @@ class TestObjfun3DClass(VisOTestCase):
     def test_opt_objfun_wrapper_3d(self):
         vars_free_opt, args_opt = viso.make_optim_input(self.calibs, self.opts, self.landmarks, self.positions,
                                                         self.oris_flu.as_rotvec(),
-                                                        landmark_vecs=self.landmark_vecs)
+                                                        landmark_vecs=self.landmark_vecs)[:2]
         error = viso.objfun_3d_wrapper(vars_free_opt, args_opt)
 
         print(f"Max error value for ground truth: {np.max(np.abs(error))}")
@@ -40,7 +40,7 @@ class TestObjfun3DClass(VisOTestCase):
 
             # Calculate objective function through wrapper
             vars_free, args = viso.make_optim_input(self.calibs, self.opts, landmarks_rand, positions_rand,
-                                                    oris_flu_rand, landmark_vecs=landmark_vecs_rand)
+                                                    oris_flu_rand, landmark_vecs=landmark_vecs_rand)[:2]
             error_wrapper = viso.objfun_3d_wrapper(vars_free, args).reshape(error.shape)
 
             # Test

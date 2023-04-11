@@ -1,10 +1,10 @@
+import os
+import sys
+sys.path.insert(0, os.path.dirname(__file__) + "/..")
+
 import unittest
 from .viso_test_case import VisOTestCase
-import os
 
-import sys
-
-sys.path.insert(0, os.path.dirname(__file__) + "/..")
 
 import numpy as np
 import bboVisO.viso as viso
@@ -24,7 +24,7 @@ class TestObjfunReproClass(VisOTestCase):
     def test_opt_objfun_wrapper_repro(self):
         vars_free_opt, args_opt = viso.make_optim_input(self.calibs, self.opts, self.landmarks, self.positions,
                                                         self.oris_flu.as_rotvec(),
-                                                        landmark_imcoords=self.landmark_imcoords)
+                                                        landmark_imcoords=self.landmark_imcoords)[0:2]
         error = viso.objfun_repro_wrapper(vars_free_opt, args_opt)
         max_error = np.max(np.abs(error))
         np.testing.assert_allclose(error, np.zeros_like(error), rtol=1e-10, atol=1e-10)
@@ -45,7 +45,7 @@ class TestObjfunReproClass(VisOTestCase):
 
             # Calculate objective function through wrapper
             vars_free, args = viso.make_optim_input(self.calibs, self.opts, landmarks_rand, positions_rand,
-                                                    oris_flu_rand, landmark_imcoords=self.landmark_imcoords)
+                                                    oris_flu_rand, landmark_imcoords=self.landmark_imcoords)[0:2]
             error_wrapper = viso.objfun_repro_wrapper(vars_free, args)
 
             # Test

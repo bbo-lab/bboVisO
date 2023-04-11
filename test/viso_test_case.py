@@ -23,7 +23,7 @@ class VisOTestCase(unittest.TestCase):
                               allow_pickle=True)[()]["calibs"]
         self.camerasystem = Camerasystem.from_calibs(self.calibs)
 
-        self.landmarks = sim.get_landmarks(8, radius=15)
+        self.landmarks = sim.get_landmarks(8, radius=15, offset=(0, 0, 10))
         self.positions, self.oris_flu = sim.get_screw_trajectory(length=10, start=(-5, 0, 0), direction=(1, 0, 0),
                                                                  radius=1, v0=1, period=1, fps=1)
 

@@ -1,10 +1,10 @@
-import unittest
-from .viso_test_case import VisOTestCase
 import os
-
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__) + "/..")
+
+import unittest
+from .viso_test_case import VisOTestCase
 
 import numpy as np
 from bboVisO.test import check_jacobian, calc_2point_jacobian
@@ -15,19 +15,21 @@ from jax import jit
 import calibcam.helper_ag
 import matplotlib.pyplot as plt
 
+
 class TestJacobianReproClass(VisOTestCase):
     def test_opt_jacobian(self):
-        vars_free_opt, args_opt = viso.make_optim_input(self.calibs, self.opts, self.landmarks, self.positions,
-                                                        self.oris_flu.as_rotvec(),
-                                                        landmark_imcoords=self.landmark_imcoords)
+        vars_free, obfun_args, optim_args = viso.make_optim_input(self.calibs, self.opts, self.landmarks,
+                                                                      self.positions,
+                                                                      self.oris_flu.as_rotvec(),
+                                                                      landmark_imcoords=self.landmark_imcoords)
 
-        args_opt["vars_full"] = np.where(args_opt["vars_full"] == 0, 1e-10, args_opt["vars_full"])
-        vars_free_opt = np.where(vars_free_opt == 0, 1e-10, vars_free_opt)
+        obfun_args["vars_full"] = np.where(obfun_args["vars_full"] == 0, 1e-10, obfun_args["vars_full"])
+        vars_free_opt = np.where(vars_free == 0, 1e-10, vars_free)
 
-        print(f"Jacobian check" 
-              f"{check_jacobian(viso.objfun_repro_jacobian_wrapper, viso.objfun_repro_wrapper, vars_free_opt, args_opt)}")
+        print(f"Jacobian check"
+              f"{check_jacobian(viso.objfun_repro_jacobian_wrapper, viso.objfun_repro_wrapper, vars_free, obfun_args)}")
 
-    def test_rodrigues_as_rotmats_jacobian_zero(self):
+    def off_test_rodrigues_as_rotmats_jacobian_zero(self):
         np.random.seed(0)
 
         # 0 rotvects

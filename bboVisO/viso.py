@@ -6,13 +6,15 @@ from jax import jit, jacfwd as jacobian  # jacfwd is recommended for 'tall' jaco
 from scipy.spatial.transform import Rotation as R
 from scipy.optimize import least_squares, OptimizeResult
 from calibcamlib.camerasystem import Camerasystem
-from bboVisO.geometry import umeyama
+from bboVisO.geometry import align_positions_orientations
+from itertools import cycle
+
 
 debug = False
 precalc = None
 
 
-def infer_position_attitude(landmark_imcoords,  calibs, opts_optim, opts):
+def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts):
     # Initializations, for alternating updates
     landmarks_opt = None
     positions_opt = None
@@ -24,7 +26,7 @@ def infer_position_attitude(landmark_imcoords,  calibs, opts_optim, opts):
 
     # Optimize all at once or alternate
     optimize = [["oris", "positions", "landmarks"]]
-    # optimize = cycle(["oris", "positions", "landmarks"])  # Seems to converge to the same value
+    # optimize = cycle([["oris", "positions"], "landmarks"])  # Seems to converge to the same value
 
     t = time.time()
     precalc = get_precalc()
@@ -39,17 +41,17 @@ def infer_position_attitude(landmark_imcoords,  calibs, opts_optim, opts):
 
         # Run optimization
         print(f"Optimizing {opt}")
-        vars_free, args = make_optim_input(calibs, opts, landmarks_opt, positions_opt, oris_flu_opt, optimize=opt,
+        vars_free, objfun_args, optim_args = make_optim_input(calibs, opts, landmarks_opt, positions_opt, oris_flu_opt, optimize=opt,
                                                 precalc=precalc, landmark_imcoords=landmark_imcoords)
 
         min_result: OptimizeResult = least_squares(objfun_repro_wrapper,
                                                    vars_free,
-                                                   bounds=np.array([[-np.inf, np.inf]] * vars_free.size).T,
-                                                   args=[args],
+                                                   args=[objfun_args],
+                                                   **optim_args,
                                                    **opts_optim
                                                    )
 
-        landmarks_opt, positions_opt, oris_flu_opt = unravel_vars(min_result.x, args)[:3]
+        landmarks_opt, positions_opt, oris_flu_opt = unravel_vars(min_result.x, objfun_args)[:3]
 
         if end_optim:
             break
@@ -58,7 +60,7 @@ def infer_position_attitude(landmark_imcoords,  calibs, opts_optim, opts):
         positions_prev = positions_opt
 
         print(f"Max pos shift {max_pos_shift}")
-        if max_pos_shift < 1e-3:
+        if "positions" in opt and max_pos_shift < 1e-3:
             end_optim = True
 
     print(f"Optimization took {time.time() - t} s")
@@ -85,22 +87,31 @@ def infer_position_attitude(landmark_imcoords,  calibs, opts_optim, opts):
 
 
 def align_results_by_landmarks(landmarks_real, landmarks, positions, oris_flu):
-    rot, t, s = umeyama(landmarks, landmarks_real)
-    landmarks = landmarks @ rot.T * s + t
-    positions = positions @ rot.T * s + t
-    oris_flu = R.from_matrix(rot) * R.from_rotvec(oris_flu)
-
-    # Combine the 2 cameras (one will be nan)
+    positions_aligned, orientations_aligned = align_positions_orientations(landmarks_real, landmarks,
+                                                                           [landmarks, positions], [oris_flu])
+    landmarks = positions_aligned[0]
+    positions = positions_aligned[1]
+    oris_flu = orientations_aligned[0]
     return landmarks, positions, oris_flu
 
 
 def align_results_by_positions(positions_real, landmarks, positions, oris_flu):
-    rot, t, s = umeyama(positions, positions_real)
-    landmarks = landmarks @ rot.T * s + t
-    positions = positions @ rot.T * s + t
-    oris_flu = R.from_matrix(rot) * R.from_rotvec(oris_flu)
+    positions_aligned, orientations_aligned = align_positions_orientations(positions_real, positions,
+                                                                           [landmarks, positions], [oris_flu])
+    landmarks = positions_aligned[0]
+    positions = positions_aligned[1]
+    oris_flu = orientations_aligned[0]
+    return landmarks, positions, oris_flu
 
-    # Combine the 2 cameras (one will be nan)
+
+def align_results_by_perches(landmarks_real, landmarks, positions, oris_flu):
+    positions_aligned, orientations_aligned = align_positions_orientations(landmarks_real, landmarks,
+                                                                        [landmarks, positions],
+                                                                        [oris_flu],
+                                                                        fix_indices=(0, 1))
+    landmarks = positions_aligned[0]
+    positions = positions_aligned[1]
+    oris_flu = orientations_aligned[0]
     return landmarks, positions, oris_flu
 
 
@@ -201,7 +212,10 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
                                                                 oris_flu,
                                                                 optimize=optimize)
 
-    args = {
+    k = landmark_vecs.shape[0]
+    n = landmark_vecs.shape[1]
+
+    obfun_args = {
         'vars_full': vars_full,  # All possible vars, free vars will be substituted in _free wrapper functions
         'mask_opt': mask_free_input,  # Mask of free vars within all vars
         'landmark_imcoords': landmark_imcoords,
@@ -210,8 +224,12 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
         'precalc': get_precalc() if precalc is None else precalc
     }
 
-    # TODO (unknown speed) return jac_sparsity for optimization
-    return vars_free, args
+    optim_args = {
+        'bounds': np.array([[-np.inf, np.inf]] * vars_free.size).T,
+        'jac_sparsity': make_jacobian_sparsity_mask(k, n, mask_free_input)
+    }
+
+    return vars_free, obfun_args, optim_args
 
 
 def make_initialization(landmark_vectors, calibs, opts, landmarks=None, positions=None, oris_flu=None, optimize=None):
@@ -333,3 +351,30 @@ def unpack_calibs(calib):
     cam_ts = np.array([c["tvec_cam"] for c in calib])
 
     return cam_matrices, ks, xis, cam_Rs, cam_ts
+
+
+def make_jacobian_sparsity_mask(k, n, mask_free_input):
+    jac_sparsity = np.zeros((2 * n * k, n * 3 + k * 6), dtype=bool)
+    for i_k in range(k):
+        for i_n in range(n):
+            # Set for landmarks
+            mat_i = 2 * i_k * n + 2 * i_n
+            mat_j = 3 * i_n
+            jac_sparsity[mat_i:mat_i+2, mat_j:mat_j+3] = True
+
+    for i_k in range(k):
+        # Set for positions
+        mat_i = 2 * i_k * n
+        mat_j = 3 * i_k + 3 * n
+        jac_sparsity[mat_i:mat_i + 2* n, mat_j:mat_j + 3] = True
+
+        # ... and orientations
+        mat_j = 3 * i_k + 3 * n + 3 * k
+        jac_sparsity[mat_i:mat_i + 2 * n, mat_j:mat_j + 3] = True
+
+    # import matplotlib.pyplot as plt
+    # plt.figure()
+    # plt.imshow(jac_sparsity)
+    # plt.show()
+
+    return jac_sparsity[:, mask_free_input]
