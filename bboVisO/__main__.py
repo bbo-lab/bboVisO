@@ -17,8 +17,11 @@ viso.debug = True
 
 opts = opts.get_opts()
 
-from bboVisO.simulation import run_simulated_data
-run_simulated_data(opts)
+# from bboVisO.simulation import run_simulated_data
+# run_simulated_data(opts)
+
+from bboVisO.experiment import run_experimental_data
+run_experimental_data(opts)
 
 
 
