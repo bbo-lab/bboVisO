@@ -33,7 +33,7 @@ landmarks_add = np.vstack((landmarks_add, np.array([[-16, 0, 0]])))
 # landmarks_add = np.vstack((landmarks_add, np.array([[0, 0, 0]])))
 
 # Simulate data
-landmark_imcoords, landmarks, positions, oris_flu = sim.get_simulated_data(calibs,
+landmark_imcoords, landmarks, positions, oris_flu, cost_gt = sim.get_simulated_data(calibs,
                                                                            opts,
                                                                            pertubation_deg=pertubation_deg,
                                                                            n_landmarks=8,
@@ -45,7 +45,7 @@ landmark_imcoords, landmarks, positions, oris_flu = sim.get_simulated_data(calib
                                                                            traj_radius=1,
                                                                            traj_v0=1,
                                                                            traj_period=1,
-                                                                           fps=1
+                                                                           fps=2
                                                                            )
 
 # Optimize
@@ -64,8 +64,12 @@ sim.print_errors(landmarks, positions, oris_flu, landmarks_opt, positions_opt, o
 
 vars_free_opt, args_opt = viso.make_optim_input(calibs, opts, landmarks_opt, positions_opt,
                                                 oris_flu_opt, landmark_imcoords=landmark_imcoords)[0:2]
+
 error_repro = viso.objfun_repro_wrapper(vars_free_opt, args_opt)
-print(f"Optimized repro cost: {0.5 * np.sum(error_repro ** 2)}")
+cost_final = 0.5 * np.sum(error_repro ** 2)
+print(f"Optimized repro cost: {cost_final}")
+print(f"Optimized cost debts: {cost_final - cost_gt}")
+cost_gt
 
 landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_perches(landmarks, landmarks_opt,
                                                                                            positions_opt, oris_flu_opt)

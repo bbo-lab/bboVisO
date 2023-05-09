@@ -47,11 +47,12 @@ def get_simulated_data(calibs, opts,
                                                     landmark_vecs=landmark_vecs_perturbed)[0:2]
     error_3d = viso.objfun_3d_wrapper(vars_free_opt, args_opt)
 
-    print(f"Ground truth repro cost: {0.5 * np.sum(error_repro ** 2)}")
+    cost = 0.5 * np.sum(error_repro ** 2)
+    print(f"Ground truth repro cost: {cost}")
     print(f"Ground truth 3d cost (with reprojected image coords): {0.5 * np.sum(error_3d_repro ** 2)}")
     print(f"Ground truth 3d cost (with original landmark vectors): {0.5 * np.sum(error_3d ** 2)}")
 
-    return landmark_imcoords_perturbed, landmarks, positions, oris_flu
+    return landmark_imcoords_perturbed, landmarks, positions, oris_flu, cost
 
 
 def get_screw_trajectory(length, start, direction, radius, v0, period, fps, pertubate_pos=True, pertubate_ori=True):
@@ -186,9 +187,10 @@ def reproject_landmarks(landmark_vectors, camerasystem: Camerasystem):
     landmark_vectors_check = np.nansum(camerasystem.get_camera_lines(landmark_imcoords)[0], axis=0)
     landmark_vectors_check[mask] = np.nan
     landmark_vectors_norm = landmark_vectors / np.linalg.norm(landmark_vectors, axis=-1)[..., np.newaxis]
-    diff = np.abs(landmark_vectors_check - landmark_vectors_norm)
-    if np.nanmax(diff) > 1e-2:
-        warnings.warn(f"Projection is broken: {np.max(diff)}")
+    diff = np.arccos(np.sqrt(np.sum(landmark_vectors_check * landmark_vectors_norm, axis=-1)))
+
+    if np.nanmax(diff) > 0.1/180*np.pi:
+        print(f"Projection: Max angular error {np.nanmax(diff)/np.pi*180}° / Median angular error {np.nanmedian(diff)/np.pi*180}°")
 
     return landmark_imcoords
 
@@ -235,4 +237,8 @@ def print_errors(landmarks, positions, oris_flu, landmarks_opt, positions_opt, o
     print(f"Max landmark error (perch alignment): {np.max(np.linalg.norm(landmarks - landmarks_aligned, axis=-1))} m")
     print(f"Max orientation error (perch alignment): "
           f"{np.max(calc_orientation_errors(oris_flu.as_rotvec(), oris_flu_aligned)) / np.pi * 180} deg")
+    print(f"Median position error (perch alignment): {np.median(np.linalg.norm(positions - positions_aligned, axis=-1))} m")
+    print(f"Median landmark error (perch alignment): {np.median(np.linalg.norm(landmarks - landmarks_aligned, axis=-1))} m")
+    print(f"Median orientation error (perch alignment): "
+          f"{np.median(calc_orientation_errors(oris_flu.as_rotvec(), oris_flu_aligned)) / np.pi * 180} deg")
     print()
