@@ -3,6 +3,7 @@ from scipy.spatial.transform import Rotation as R
 from scipy.optimize import fmin
 import warnings
 
+
 def align_positions_orientations(reference_points, points, positions, orientations, fix_indices=None):
     # If `fix_indices` is None, umeyama algorithm is used to find the best alignment of `points` to `reference_points`,
     # and `positions` and `orientations` are transformed accordingly.
@@ -22,7 +23,7 @@ def align_positions_orientations(reference_points, points, positions, orientatio
         p_line_len = np.linalg.norm(p_line)
         p_line /= p_line_len
 
-        s = ref_line_len/p_line_len
+        s = ref_line_len / p_line_len
         with warnings.catch_warnings():
             # We know that the problem is underdefined, but we don't care because we solve
             # the free rotation afterwards.
@@ -110,6 +111,26 @@ def test_umeyama():
     R_est, t_est = umeyama(src, dst, estimate_scale=False)
     assert np.allclose(R_est, R_true, atol=1e-3)
     assert np.allclose(t_est, t_true, atol=1e-3)
+
+
+def build_vector_bundle(base_bundle: np.ndarray, add_bundles: np.ndarray):
+    return_bundle = base_bundle.copy()
+
+    for j in range(10):
+        for i_fr, add_bundle in enumerate(add_bundles):
+            return_mask = ~np.any(np.isnan(return_bundle), axis=-1)
+            add_mask = ~np.any(np.isnan(add_bundle), axis=-1)
+            common_mask = return_mask & add_mask
+            replace_mask = add_mask & ~return_mask
+            if np.sum(common_mask) > 1 and np.any(replace_mask):
+                align_R = R.align_vectors(return_bundle[common_mask], return_bundle[common_mask])[0]
+                return_bundle[replace_mask] = align_R.apply(add_bundle[replace_mask])
+
+            if not np.any(np.isnan(return_bundle)):
+                return return_bundle
+
+    warnings.warn("Could not fill return_bundle")
+    return return_bundle
 
 
 if __name__ == '__main__':

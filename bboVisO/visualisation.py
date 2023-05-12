@@ -1,4 +1,10 @@
 import numpy as np
+import os
+from pathlib import Path
+from calibcamlib.camerasystem import Camerasystem
+from scipy.spatial.transform import Rotation as R
+from PIL import Image
+from matplotlib import pyplot as plt
 
 
 def create_wavefront_balls(coords, radius, output_file):
@@ -10,6 +16,8 @@ def create_wavefront_balls(coords, radius, output_file):
     radius (float): The radius of the spheres.
     output_file (str): The name of the output file.
     """
+
+    os.makedirs(Path(output_file).parent.as_posix(), exist_ok=True)
 
     # Open the output file for writing
     with open(output_file, 'w') as f:
@@ -61,6 +69,8 @@ def create_wavefront_cylinders(start_points, end_points, radius, output_file):
     """
     num_cylinders = len(start_points)
 
+    os.makedirs(Path(output_file).parent.as_posix(), exist_ok=True)
+
     with open(output_file, 'w') as f:
         vertex_count = 0
         for i in range(num_cylinders):
@@ -104,60 +114,34 @@ def create_wavefront_cylinders(start_points, end_points, radius, output_file):
 
                 vertex_count += 4
 
-# def create_wavefront_cylinders(start_points, end_points, radius, output_file):
-#     """
-#     Create a Wavefront OBJ file with cylinders connecting the given start and end points.
-#
-#     Args:
-#     start_points (numpy.ndarray): An nx3 numpy array of coordinates representing the starting points.
-#     end_points (numpy.ndarray): An nx3 numpy array of coordinates representing the ending points.
-#     radius (float): The radius of the cylinders.
-#     output_file (str): The name of the output Wavefront OBJ file.
-#     """
-#     num_cylinders = len(start_points)
-#
-#     vertices = []
-#     faces = []
-#
-#     for i in range(num_cylinders):
-#         start_point = start_points[i]
-#         end_point = end_points[i]
-#         vec = end_point - start_point
-#         vec_len = np.linalg.norm(vec)
-#         vec_normalized = vec / vec_len
-#
-#         if vec_normalized[0] == 0:
-#             x_axis = np.array([1, 0, 0])
-#         else:
-#             x_axis = np.array([0, 1, 0])
-#
-#         y_axis = np.cross(vec_normalized, x_axis)
-#         y_axis_normalized = y_axis / np.linalg.norm(y_axis)
-#         x_axis_normalized = np.cross(y_axis_normalized, vec_normalized)
-#
-#         rotation_matrix = np.column_stack([x_axis_normalized, y_axis_normalized, vec_normalized])
-#         num_segments = 16
-#         angle_increment = 2 * np.pi / num_segments
-#
-#         cylinder_vertices = []
-#         for j in range(num_segments):
-#             angle1 = j * angle_increment
-#             angle2 = (j + 1) * angle_increment
-#
-#             vertex1 = start_point + radius * np.matmul(rotation_matrix, np.array([np.cos(angle1), np.sin(angle1), 0]))
-#             vertex2 = start_point + radius * np.matmul(rotation_matrix, np.array([np.cos(angle2), np.sin(angle2), 0]))
-#             vertex3 = end_point + radius * np.matmul(rotation_matrix, np.array([np.cos(angle2), np.sin(angle2), 0]))
-#             vertex4 = end_point + radius * np.matmul(rotation_matrix, np.array([np.cos(angle1), np.sin(angle1), 0]))
-#
-#             cylinder_vertices.extend([vertex1, vertex2, vertex3, vertex4])
-#             faces.extend([len(vertices) + 1, len(vertices) + 2, len(vertices) + 3])
-#             faces.extend([len(vertices) + 1, len(vertices) + 3, len(vertices) + 4])
-#
-#             vertices.extend([vertex1, vertex2, vertex3, vertex4])
-#
-#         with open(output_file, 'w') as f:
-#             for vertex in vertices:
-#                 f.write(f"v {vertex[0]} {vertex[1]} {vertex[2]}\n")
-#
-#             for face in faces:
-#                 f.write(f"f {face}\n")
+
+def plot_frames(readers, cam_offsets, analysis_frames, calibs, im_coords_mark, landmarks, positions, oris_flu, fr_idx, save_path=None):
+    cs = Camerasystem.from_calibs(calibs)
+
+    a_idx = np.where(analysis_frames == fr_idx)[0][0]
+    pos = positions[a_idx]
+    ori_flu = R.from_rotvec(oris_flu[a_idx])
+
+    dirs = ori_flu.inv().apply(landmarks - pos)
+    im_coords = cs.project(dirs)
+
+    fh = plt.figure(dpi=600, figsize=(5, 6))
+    for i_c, (r, co) in enumerate(zip(readers, cam_offsets)):
+        try:
+            im = r.get_data(fr_idx + co)
+            plt.subplot(2, 1, i_c + 1)
+            plt.imshow(im)
+            for i_lm, lm in enumerate(im_coords_mark[i_c, a_idx]):
+                if not np.any(np.isnan(lm)):
+                    ph0 = plt.plot(*lm, "+", markersize=6, markeredgewidth=0.3)[0]
+                    ph1 = plt.plot(*im_coords[i_c, i_lm], "x", markersize=6, markeredgewidth=0.3)[0]
+                    ph1.set_color(ph0.get_color())
+        except StopIteration:
+            pass
+    plt.suptitle(f"Frame {fr_idx}")
+    # plt.show()
+
+    if save_path is not None:
+        os.makedirs(Path(save_path).parent.as_posix(), exist_ok=True)
+        plt.savefig(save_path)
+    plt.close()

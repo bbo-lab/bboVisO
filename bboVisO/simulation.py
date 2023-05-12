@@ -292,4 +292,5 @@ def run_simulated_data(opts):
 
     landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_perches(landmarks, landmarks_opt,
                                                                                            positions_opt, oris_flu_opt)
-    pass
+
+    return landmarks_aligned, positions_aligned, oris_flu_aligned
