@@ -245,9 +245,7 @@ def print_errors(landmarks, positions, oris_flu, landmarks_opt, positions_opt, o
     print()
 
 
-def run_simulated_data(opts):
-    # Degree by which to pertubate camera vector angles
-    pertubation_deg = 0.4
+def run_simulated_data(opts, pertubation_deg=0.4, landmark_radius=50):
     calibs = np.load(os.path.dirname(__file__) + "/../test/data/multicam_calibration.npy", allow_pickle=True)[()][
         "calibs"]
     # Additional landmarks (perches etc.)
@@ -262,7 +260,7 @@ def run_simulated_data(opts):
                                                                                         opts,
                                                                                         pertubation_deg=pertubation_deg,
                                                                                         n_landmarks=8,
-                                                                                        landmark_radius=50,
+                                                                                        landmark_radius=landmark_radius,
                                                                                         landmarks_add=landmarks_add,
                                                                                         traj_length=30,
                                                                                         traj_start=(-15, 0, 1.5),
@@ -280,11 +278,17 @@ def run_simulated_data(opts):
     opts_optim["jac"] = "2-point"
     # opts_optim["jac"] = "3-point"
     landmarks_opt, positions_opt, oris_flu_opt = viso.infer_position_attitude(landmark_imcoords, calibs,
-                                                                              opts_optim, opts)
+                                                                              opts_optim, opts,
+                                                                              landmarks_opt=landmarks,
+                                                                              positions_opt=positions,
+                                                                              oris_flu_opt=oris_flu.as_rotvec(),
+                                                                              )
     # Error output
     print_errors(landmarks, positions, oris_flu, landmarks_opt, positions_opt, oris_flu_opt)
     vars_free_opt, args_opt = viso.make_optim_input(calibs, opts, landmarks_opt, positions_opt,
-                                                    oris_flu_opt, landmark_imcoords=landmark_imcoords)[0:2]
+                                                    oris_flu_opt,
+                                                    landmark_imcoords=landmark_imcoords,
+                                                    )[0:2]
     error_repro = viso.objfun_repro_wrapper(vars_free_opt, args_opt)
     cost_final = 0.5 * np.sum(error_repro ** 2)
     print(f"Optimized repro cost: {cost_final}")
