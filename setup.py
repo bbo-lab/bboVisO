@@ -23,5 +23,5 @@ setup(
     ],
     packages=['bboVisO'],
     include_package_data=True,
-    install_requires=['numpy', 'jax', 'bbo-calibcam', 'bbo-calibcamlib'],
+    install_requires=['numpy', 'jax', 'bbo-calibcam', 'bbo-calibcamlib', 'scipy'],
 )

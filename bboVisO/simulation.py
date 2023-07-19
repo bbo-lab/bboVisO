@@ -279,9 +279,9 @@ def run_simulated_data(opts, pertubation_deg=0.4, landmark_radius=50):
     # opts_optim["jac"] = "3-point"
     landmarks_opt, positions_opt, oris_flu_opt = viso.infer_position_attitude(landmark_imcoords, calibs,
                                                                               opts_optim, opts,
-                                                                              landmarks_opt=landmarks,
-                                                                              positions_opt=positions,
-                                                                              oris_flu_opt=oris_flu.as_rotvec(),
+                                                                              landmarks_init=landmarks,
+                                                                              positions_init=positions,
+                                                                              oris_flu_opt_init=oris_flu.as_rotvec(),
                                                                               )
     # Error output
     print_errors(landmarks, positions, oris_flu, landmarks_opt, positions_opt, oris_flu_opt)
@@ -297,4 +297,4 @@ def run_simulated_data(opts, pertubation_deg=0.4, landmark_radius=50):
     landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_perches(landmarks, landmarks_opt,
                                                                                            positions_opt, oris_flu_opt)
 
-    return landmarks_aligned, positions_aligned, oris_flu_aligned
+    return landmarks_aligned, positions_aligned, oris_flu_aligned, list(range(positions.shape[0]))

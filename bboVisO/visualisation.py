@@ -115,8 +115,12 @@ def create_wavefront_cylinders(start_points, end_points, radius, output_file):
                 vertex_count += 4
 
 
-def plot_frames(readers, cam_offsets, analysis_frames, calibs, im_coords_mark, landmarks, positions, oris_flu, fr_idx, save_path=None):
+def plot_frames(name, path, reader, analysis_frames, calibs, landmark_imcoords,
+                        landmarks, positions, oris_flu,
+                        fr_idx):
     cs = Camerasystem.from_calibs(calibs)
+
+    save_path = os.path.join(path, name) + f"_{fr_idx}.png"
 
     a_idx = np.where(analysis_frames == fr_idx)[0][0]
     pos = positions[a_idx]
@@ -125,20 +129,19 @@ def plot_frames(readers, cam_offsets, analysis_frames, calibs, im_coords_mark, l
     dirs = ori_flu.inv().apply(landmarks - pos)
     im_coords = cs.project(dirs)
 
-    fh = plt.figure(dpi=600, figsize=(5, 6))
-    for i_c, (r, co) in enumerate(zip(readers, cam_offsets)):
-        try:
-            im = r.get_data(fr_idx + co)
-            plt.subplot(2, 1, i_c + 1)
-            plt.imshow(im)
-            for i_lm, lm in enumerate(im_coords_mark[i_c, a_idx]):
-                if not np.any(np.isnan(lm)):
-                    ph0 = plt.plot(*lm, "+", markersize=6, markeredgewidth=0.3)[0]
-                    ph1 = plt.plot(*im_coords[i_c, i_lm], "x", markersize=6, markeredgewidth=0.3)[0]
-                    ph1.set_color(ph0.get_color())
-        except StopIteration:
-            pass
-    plt.suptitle(f"Frame {fr_idx}")
+    fh = plt.figure(dpi=600, figsize=(5, 3))
+    r = reader
+    try:
+        im = r.get_data(fr_idx)
+        plt.imshow(im)
+        for i_lm, lm in enumerate(landmark_imcoords[0, a_idx]):
+            if not np.any(np.isnan(lm)) and not np.any(np.isnan(im_coords[0, i_lm])):
+                ph0 = plt.plot(*lm, "+", markersize=6, markeredgewidth=0.3)[0]
+                ph1 = plt.plot(*im_coords[0, i_lm], "x", markersize=6, markeredgewidth=0.3)[0]
+                ph1.set_color(ph0.get_color())
+    except StopIteration:
+        pass
+    plt.title(f"Frame {fr_idx}")
     # plt.show()
 
     if save_path is not None:

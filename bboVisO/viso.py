@@ -8,13 +8,15 @@ from scipy.optimize import least_squares, OptimizeResult
 from calibcamlib.camerasystem import Camerasystem
 from bboVisO.geometry import align_positions_orientations, build_vector_bundle
 from itertools import cycle
+from calibcamlib.helper import intersect
 
 debug = False
 precalc = None
 
 
 def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
-                            landmarks_opt=None, positions_opt=None, oris_flu_opt=None, optimize=None):
+                            landmarks_init=None, positions_init=None, oris_flu_opt_init=None,
+                            optimize=None, landmarks_optimize=None):
     end_optim = False
 
     # Previous positions for alternating update
@@ -34,8 +36,9 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
 
         # Run optimization
         print(f"Optimizing {opt}")
-        vars_free, objfun_args, optim_args = make_optim_input(calibs, opts, landmarks_opt, positions_opt, oris_flu_opt,
-                                                              optimize=opt,
+        vars_free, objfun_args, optim_args = make_optim_input(calibs, opts,
+                                                              landmarks_init, positions_init, oris_flu_opt_init,
+                                                              optimize=opt, landmarks_optimize=landmarks_optimize,
                                                               precalc=precalc, landmark_imcoords=landmark_imcoords)
 
         min_result: OptimizeResult = least_squares(objfun_repro_wrapper,
@@ -45,9 +48,9 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
                                                    **opts_optim
                                                    )
 
-        landmarks_opt, positions_opt, oris_flu_opt = unravel_vars(min_result.x, objfun_args)[:3]
-        max_pos_shift = np.max(np.abs(positions_prev - positions_opt))
-        positions_prev = positions_opt
+        landmarks_init, positions_init, oris_flu_opt_init = unravel_vars(min_result.x, objfun_args)[:3]
+        max_pos_shift = np.max(np.abs(positions_prev - positions_init))
+        positions_prev = positions_init
 
         print(f"Max pos shift {max_pos_shift}")
 
@@ -71,7 +74,7 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
     #
     # print(f"Max position error: {np.max(np.linalg.norm(positions-positions_aligned, axis=-1))}")
 
-    return landmarks_opt, positions_opt, oris_flu_opt
+    return landmarks_init, positions_init, oris_flu_opt_init
 
 
 def align_results_by_landmarks(landmarks_real, landmarks, positions, oris_flu):
@@ -202,16 +205,18 @@ def objfun_jacobian_3d_wrapper(free_vars, args):
     return obj_fcn_jacobian
 
 
-def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None, optimize=None, precalc=None,
-                     landmark_imcoords=None, landmark_vecs=None, landmark_dists=None):
+def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None,
+                     optimize=None, landmarks_optimize=None,
+                     precalc=None, landmark_imcoords=None, landmark_vecs=None):
     cs = Camerasystem.from_calibs(calibs)
     if landmark_vecs is None and landmark_imcoords is not None:
         landmark_vecs = np.nansum(cs.get_camera_lines(landmark_imcoords)[0], axis=0)
         landmark_vecs[np.all(landmark_vecs == 0, axis=-1)] = np.nan
 
-    vars_free, vars_full, mask_free_input = make_initialization(landmark_vecs, calibs, opts, landmarks, positions,
-                                                                oris_flu,
-                                                                optimize=optimize)
+    vars_free, vars_full, mask_free_input = \
+        make_initialization(landmark_vecs, calibs, opts, landmarks, positions,
+                            oris_flu,
+                            optimize=optimize, landmarks_optimize=landmarks_optimize)
 
     k = landmark_vecs.shape[0]
     n = landmark_vecs.shape[1]
@@ -233,7 +238,8 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
     return vars_free, obfun_args, optim_args
 
 
-def make_initialization(landmark_vectors, calibs, opts, landmarks=None, positions=None, oris_flu=None, optimize=None):
+def make_initialization(landmark_vectors, calibs, opts, landmarks=None, positions=None, oris_flu=None,
+                        optimize=None, landmarks_optimize=None):
     if optimize is None:
         optimize = ["landmarks", "positions", "oris"]
 
@@ -253,6 +259,7 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
     # Init landmarks as extensions of t=0 camera vecs
     # Fix relative x position to landmark 1
     cs = Camerasystem.from_calibs(calibs)
+    # cs.cameras[0]["camera"].set_center_pixel(np.array([[960, 512]]))
 
     # Initializations
     if landmarks is not None:
@@ -290,6 +297,11 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
                 frame_landmark_vectors[common_mask], landmark_vectors[i][common_mask]
             )[0].as_rotvec()
 
+    # Fill nan landmarks as good as possible
+    for lm_idx, lm in enumerate(landmarks_init):
+        if np.any(np.isnan(lm)):
+            lm[:] = intersect(positions_init, landmark_vectors[:, lm_idx])
+
     vars_full[:] = np.hstack((
         landmarks_init.ravel(),
         positions_init.ravel(),
@@ -308,10 +320,14 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
         assert positions is not None, "Positions need to be provided if they are not optimized"
         positions_free[:] = False
     if "oris" not in optimize:
-        # assert oris_flu is not None, "Orientations need to be provided if they are not optimized"
+        assert oris_flu is not None, "Orientations need to be provided if they are not optimized"
         oris_flu_free[:] = False
 
-    if "positions" in optimize and "landmarks" in optimize and "oris" in optimize:
+    if landmarks_optimize is not None:
+        landmarks_free[~landmarks_optimize] = False
+
+    if "positions" in optimize and "landmarks" in optimize and "oris" in optimize \
+            and (landmarks_optimize is None or np.sum(~landmarks_optimize) < 3):
         # If all variables are optimized, we need to fix origin, orientation and scale
         # Fix first two coordinates of first landmark
         landmarks_free[0, 0:2] = False
@@ -321,7 +337,8 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
 
         # Fix t=0 orientation to eye(3)
         oris_flu_free[0, :] = False
-    elif "positions" in optimize and "landmarks" in optimize and "oris" not in optimize:
+    elif "positions" in optimize and "landmarks" in optimize and "oris" not in optimize \
+            and np.sum(~landmarks_optimize) < 3:
         # This case is missing a scale and an origin
         raise Exception("Fixed orientations need to be implemented")
     # elif "positions" not in optimize and "landmarks" in optimize and "oris" in optimize:
@@ -330,7 +347,6 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
     #     pass
     else:
         pass
-
 
     mask_free_input[:] = np.hstack((
         landmarks_free.ravel(),
