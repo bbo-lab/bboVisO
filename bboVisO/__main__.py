@@ -1,21 +1,16 @@
-import sys
-import time
 import jax.config
 import numpy as np
-from itertools import cycle
 import os.path
 import argparse
 from pathlib import Path
-from scipy.spatial.transform import Rotation as R
 
 from tetherlessextractor import yaml_load
 from bboVisO.acm_labels import load as acm_load
-from calibcamlib import Camerasystem
 from svidreader import SVidReader
 
 import bboVisO.opts as opts
 import bboVisO.viso as viso
-from bboVisO.output import save_to_text, save_to_wavefront
+from bboVisO.output import save_to_text
 from bboVisO.visualisation import plot_frames
 
 # single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!

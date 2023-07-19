@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 from calibcamlib.camerasystem import Camerasystem
 from scipy.spatial.transform import Rotation as R
-from PIL import Image
 from matplotlib import pyplot as plt
 
 
@@ -116,8 +115,8 @@ def create_wavefront_cylinders(start_points, end_points, radius, output_file):
 
 
 def plot_frames(name, path, reader, analysis_frames, calibs, landmark_imcoords,
-                        landmarks, positions, oris_flu,
-                        fr_idx):
+                landmarks, positions, oris_flu,
+                fr_idx):
     cs = Camerasystem.from_calibs(calibs)
 
     save_path = os.path.join(path, name) + f"_{fr_idx}.png"
@@ -129,7 +128,7 @@ def plot_frames(name, path, reader, analysis_frames, calibs, landmark_imcoords,
     dirs = ori_flu.inv().apply(landmarks - pos)
     im_coords = cs.project(dirs)
 
-    fh = plt.figure(dpi=600, figsize=(5, 3))
+    plt.figure(dpi=600, figsize=(5, 3))
     r = reader
     try:
         im = r.get_data(fr_idx)

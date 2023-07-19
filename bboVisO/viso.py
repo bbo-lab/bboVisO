@@ -7,7 +7,6 @@ from scipy.spatial.transform import Rotation as R
 from scipy.optimize import least_squares, OptimizeResult
 from calibcamlib.camerasystem import Camerasystem
 from bboVisO.geometry import align_positions_orientations, build_vector_bundle
-from itertools import cycle
 from calibcamlib.helper import intersect
 
 debug = False
@@ -17,8 +16,6 @@ precalc = None
 def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
                             landmarks_init=None, positions_init=None, oris_flu_opt_init=None,
                             optimize=None, landmarks_optimize=None):
-    end_optim = False
-
     # Previous positions for alternating update
     positions_prev = np.full((landmark_imcoords.shape[1], 3), np.nan)
 
@@ -179,30 +176,30 @@ def objfun_repro_jacobian_wrapper(free_vars, args):
     return obj_fcn_jacobian
 
 
-def objfun_jacobian_3d_wrapper(free_vars, args):
-    landmarks, positions, oris_flu, \
-        landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts = unravel_vars(free_vars, args)
-
-    obj_fcn_jacobian = [
-        np.array(
-            # Ravel over input dimensions
-            j(landmarks, positions, oris_flu, landmark_vecs).reshape(landmark_vecs.shape + (-1,))
-        )
-        for j in args['precalc']['jacobians_3d']
-    ]
-
-    # Concatenate along input dimensions
-    obj_fcn_jacobian = np.concatenate(
-        obj_fcn_jacobian,
-        axis=3)
-
-    # Ravel variable dimension
-    obj_fcn_jacobian = obj_fcn_jacobian.reshape((-1, args['mask_opt'].size))
-
-    # Dump non-free variables
-    obj_fcn_jacobian = obj_fcn_jacobian[:, args['mask_opt']]
-
-    return obj_fcn_jacobian
+# def objfun_jacobian_3d_wrapper(free_vars, args):
+#     landmarks, positions, oris_flu, \
+#         landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts = unravel_vars(free_vars, args)
+#
+#     obj_fcn_jacobian = [
+#         np.array(
+#             # Ravel over input dimensions
+#             j(landmarks, positions, oris_flu, landmark_vecs).reshape(landmark_vecs.shape + (-1,))
+#         )
+#         for j in args['precalc']['jacobians_3d']
+#     ]
+#
+#     # Concatenate along input dimensions
+#     obj_fcn_jacobian = np.concatenate(
+#         obj_fcn_jacobian,
+#         axis=3)
+#
+#     # Ravel variable dimension
+#     obj_fcn_jacobian = obj_fcn_jacobian.reshape((-1, args['mask_opt'].size))
+#
+#     # Dump non-free variables
+#     obj_fcn_jacobian = obj_fcn_jacobian[:, args['mask_opt']]
+#
+#     return obj_fcn_jacobian
 
 
 def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None,

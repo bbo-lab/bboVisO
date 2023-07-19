@@ -2,6 +2,7 @@ import os
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 
+
 def save_to_text(name, path, analysis_frames, landmarks, positions, oris_flu, error_repro):
     column_separator = "\t"
     path_base = os.path.join(path, name)
@@ -28,8 +29,8 @@ def save_to_text(name, path, analysis_frames, landmarks, positions, oris_flu, er
             file.write(f'{f}{column_separator}{e}\n')
 
     with open(path_base + "_landmarks.txt", "w") as file:
-        for l in landmarks:
-            file.write(f'{f}{column_separator}{column_separator.join(np.char.mod("%f", l))}\n')
+        for landmark in landmarks:
+            file.write(f'{f}{column_separator}{column_separator.join(np.char.mod("%f", landmark))}\n')
 
 
 def save_to_wavefront(name, path, landmarks, positions, oris_flu):

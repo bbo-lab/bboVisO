@@ -77,15 +77,15 @@ def umeyama(src, dst, estimate_scale=True):
     if np.linalg.det(U) * np.linalg.det(Vt) < 0:
         S[dim - 1, dim - 1] = -1
 
-    R = np.dot(np.dot(U, S), Vt)
+    rotmat = np.dot(np.dot(U, S), Vt)
 
     if estimate_scale:
         scale = 1.0 / src_demean.var(axis=0).sum() * np.sum(d * S[dim - 1, dim - 1])
-        T = dst_mean - scale * np.dot(src_mean, R.T)
-        return R, T, scale
+        T = dst_mean - scale * np.dot(src_mean, rotmat.T)
+        return rotmat, T, scale
     else:
-        T = dst_mean - np.dot(src_mean, R.T)
-        return R, T
+        T = dst_mean - np.dot(src_mean, rotmat.T)
+        return rotmat, T
 
 
 def test_umeyama():

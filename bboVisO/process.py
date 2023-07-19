@@ -1,22 +1,8 @@
-import sys
-
 import jax.config
 import numpy as np
-import os.path
-from pathlib import Path
-from datetime import datetime
-
-from scipy.spatial.transform import Rotation as R
 
 import bboVisO.viso as viso
-import bboVisO.viso_ag as viso_ag
-from bboVisO.geometry import align_positions_orientations
-from bboVisO.visualisation import plot_frames
 import bboVisO.acm_labels as acm_labels
-from calibcamlib.camerasystem import Camerasystem
-
-from bboVisO.visualisation import create_wavefront_balls, create_wavefront_cylinders
-from calibcamlib.camerasystem import Camerasystem
 
 # single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!
 jax.config.update("jax_enable_x64", True)

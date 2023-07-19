@@ -6,7 +6,6 @@ from scipy.spatial.transform import Rotation as R
 
 from calibcamlib.camerasystem import Camerasystem
 
-import bboVisO.viso as viso
 from bboVisO import viso as viso
 
 
