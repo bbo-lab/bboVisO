@@ -114,36 +114,36 @@ def create_wavefront_cylinders(start_points, end_points, radius, output_file):
                 vertex_count += 4
 
 
-def plot_frames(name, path, reader, analysis_frames, calibs, landmark_imcoords,
+def plot_frames(name, path, readers, analysis_frames, calibs, landmark_imcoords,
                 landmarks, positions, oris_flu,
                 fr_idx):
     cs = Camerasystem.from_calibs(calibs)
-
-    save_path = os.path.join(path, name) + f"_{fr_idx}.png"
 
     a_idx = np.where(analysis_frames == fr_idx)[0][0]
     pos = positions[a_idx]
     ori_flu = R.from_rotvec(oris_flu[a_idx])
 
     dirs = ori_flu.inv().apply(landmarks - pos)
-    im_coords = cs.project(dirs)
+    imcoords_proj = cs.project(dirs)
 
-    plt.figure(dpi=600, figsize=(5, 3))
-    r = reader
-    try:
-        im = r.get_data(fr_idx)
-        plt.imshow(im)
-        for i_lm, lm in enumerate(landmark_imcoords[0, a_idx]):
-            if not np.any(np.isnan(lm)) and not np.any(np.isnan(im_coords[0, i_lm])):
-                ph0 = plt.plot(*lm, "+", markersize=6, markeredgewidth=0.3)[0]
-                ph1 = plt.plot(*im_coords[0, i_lm], "x", markersize=6, markeredgewidth=0.3)[0]
-                ph1.set_color(ph0.get_color())
-    except StopIteration:
-        pass
-    plt.title(f"Frame {fr_idx}")
-    # plt.show()
+    for cam_idx, (r, im_c_proj, im_c) in enumerate(zip(readers, imcoords_proj, landmark_imcoords)):
+        plt.figure(dpi=600, figsize=(5, 3))
+        cam_path = os.path.join(path, f"cam{cam_idx}")
+        save_path = os.path.join(cam_path, name) + f"_{fr_idx}.png"
+        try:
+            im = r.get_data(fr_idx)
+            plt.imshow(im)
+            for i_lm, lm in enumerate(im_c[a_idx]):
+                if not np.any(np.isnan(lm)) and not np.any(np.isnan(im_c_proj[i_lm])):
+                    ph0 = plt.plot(*lm, "+", markersize=6, markeredgewidth=0.3)[0]
+                    ph1 = plt.plot(*im_c_proj[i_lm], "x", markersize=6, markeredgewidth=0.3)[0]
+                    ph1.set_color(ph0.get_color())
+        except StopIteration:
+            pass
+        plt.title(f"Frame {fr_idx}, Cam {cam_idx}")
+        # plt.show()
 
-    if save_path is not None:
-        os.makedirs(Path(save_path).parent.as_posix(), exist_ok=True)
-        plt.savefig(save_path)
-    plt.close()
+        if save_path is not None:
+            os.makedirs(Path(save_path).parent.as_posix(), exist_ok=True)
+            plt.savefig(save_path)
+        plt.close()

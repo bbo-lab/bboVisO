@@ -57,11 +57,13 @@ if args.from_yml:
 
     if args.img_out:
         path = Path(os.path.join(args.img_out[0], yml_path.stem)).expanduser().resolve().as_posix()
-        os.makedirs(path, exist_ok=True)
-        reader = SVidReader(data["battery_cycle"]["head4pi"]["front"]["video"])
+        readers = [SVidReader(data["battery_cycle"]["head4pi"][vidname]["video"])
+                   for vidname in data["battery_cycle"]["landmark_labels"]["videos"]]
+
+        assert len(readers)==len(landmark_imcoords), "Number of readers must match first dm of landmark_imcoords"
 
         for fr_idx in analysis_frames:
-            plot_frames(yml_path.stem, path, reader, analysis_frames, calibs, landmark_imcoords,
+            plot_frames(yml_path.stem, path, readers, analysis_frames, calibs, landmark_imcoords,
                         landmarks, positions, oris,
                         fr_idx)
 elif args.simulation:
