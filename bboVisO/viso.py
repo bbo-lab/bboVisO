@@ -207,7 +207,8 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
                      precalc=None, landmark_imcoords=None, landmark_vecs=None):
     cs = Camerasystem.from_calibs(calibs)
     if landmark_vecs is None and landmark_imcoords is not None:
-        landmark_vecs = np.nansum(cs.get_camera_lines(landmark_imcoords)[0], axis=0)
+        landmark_vecs = np.nanmean(cs.get_camera_lines(landmark_imcoords)[0], axis=0)
+        landmark_vecs /= np.linalg.norm(landmark_vecs, axis=-1, keepdims=True)  # Norm in case of averaging
         landmark_vecs[np.all(landmark_vecs == 0, axis=-1)] = np.nan
 
     vars_free, vars_full, mask_free_input = \

@@ -12,20 +12,28 @@ viso.debug = True
 
 
 def run(landmark_labels, landmark_coordinates, calibs, opts):
+    # Names of all landmarks
     labels = sorted(list(landmark_coordinates["landmarks"].keys()))
+    # Origin of resulting coordinate system
     origin = np.array(landmark_coordinates["origin"]["position"])
 
+    # Frames with labels
     detected_frames = acm_labels.get_labeled_frames(landmark_labels)
+    # Marked labels
     detected_labels = sorted(acm_labels.get_labels(landmark_labels))
 
+    # All marked labels must correspond to a landmark, coordinates may be empty or nan
     assert set(detected_labels).issubset(labels), "Some detected labels are unknown"
 
-    landmarks_all = []
-    landmarks_optimize = []
-    landmarks_far = []
-    landmarks_use = []
-    landmarks_identity = []
+    # Build landmark coordinates
+    landmarks_all = []  # Coordinates of landmarks, may be nan
+    landmarks_optimize = []  # Should this coordinate be optimized by bboViso?
+    landmarks_far = []  # Is it a far away landmark (used in first run)
+    landmarks_use = []  # Should it be used at all?
+    landmarks_identity = []  # Is it identical to another one?
+    # Only extract landmarks taht are also marked
     for ln in detected_labels:
+        #
         if "position" not in landmark_coordinates["landmarks"][ln] or\
                 len(landmark_coordinates["landmarks"][ln]["position"]) == 0:
             landmark_coordinates["landmarks"][ln]["position"] = [np.nan, np.nan, np.nan]
@@ -62,8 +70,9 @@ def run(landmark_labels, landmark_coordinates, calibs, opts):
     landmarks_far = np.array(landmarks_far)
     landmarks_use = np.array(landmarks_use)
 
+
     # cams x frames x landmarks x pix_coords
-    landmark_imcoords = np.full((1, len(detected_frames), len(detected_labels), 2), np.nan)
+    landmark_imcoords = np.full((len(calibs), len(detected_frames), len(detected_labels), 2), np.nan)
 
     for i_lm, lm in enumerate(detected_labels):
         if lm in landmark_labels:
@@ -74,7 +83,7 @@ def run(landmark_labels, landmark_coordinates, calibs, opts):
                     lm_idx = i_lm
                 if fr_idx in landmark_labels[lm]:
                     if not np.any(np.isnan(landmark_labels[lm][fr_idx])):
-                        landmark_imcoords[0, i_fr, lm_idx] = np.nanmean(np.array([
+                        landmark_imcoords[:, i_fr, lm_idx] = np.nanmean(np.array([
                                                                             landmark_labels[lm][fr_idx][0],
                                                                             landmark_imcoords[0, i_fr, lm_idx]
                                                                         ]), axis=0)

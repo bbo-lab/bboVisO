@@ -39,7 +39,9 @@ if args.from_yml:
     data = yaml_load.load(yml_path, {"storage": "/media/smb/soma-fs.ad01.caesar.de/bbo/"})
     from bboVisO.process import run  # noqa: E402
 
-    calibs = np.load(data["dataset"]["calibration_4pi"]["front"], allow_pickle=True)[()]["calibs"]
+    calibration = data["battery_cycle"]["landmark_labels"]["calibration"]
+    calibs = np.load(data["dataset"]["calibration_4pi"][calibration], allow_pickle=True)[()]["calibs"]
+
     landmarks, positions, oris, analysis_frames, landmark_imcoords, error_repro = \
         run(
             landmark_labels=acm_load(data["battery_cycle"]["landmark_labels"]["file"])["labels"],
