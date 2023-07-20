@@ -159,8 +159,8 @@ def run(landmark_labels, landmark_coordinates, calibs, opts):
     print(f"Optimized repro cost: {0.5 * np.sum(error_repro ** 2)}")
 
     abserr = np.sqrt(np.sum(error_repro ** 2, axis=-1))
-    print(f"Highest summed error frames: {detected_frames[np.argpartition(np.sum(abserr, axis=-1), -4)[-4:]]}")
-    print(f"Highest max error frames: {detected_frames[np.argpartition(np.max(abserr, axis=-1), -4)[-4:]]}")
+    print(f"Highest mean error frames: {detected_frames[np.argpartition(np.nanmean(abserr, axis=-1), -4)[-4:]]}")
+    print(f"Highest max error frames: {detected_frames[np.argpartition(np.nanmaxmax(abserr, axis=-1), -4)[-4:]]}")
 
     landmarks, positions, oris_flu = (landmarks_opt, positions_opt, oris_flu_opt)
 
