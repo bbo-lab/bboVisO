@@ -1,0 +1,22 @@
+name: bboVisO
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy
+  - opencv=4.6.0
+  - py-opencv=4.6.0
+  - pyyaml
+  - scipy
+  - imageio
+  - joblib
+  - cudatoolkit
+  - pip
+  - pip:
+    - jaxlib
+    - jax
+    - bbo-ccvtools
+    - bbo-calibcamlib
+    - bbo-calibcam
+# Also requires tetherless-extractor
