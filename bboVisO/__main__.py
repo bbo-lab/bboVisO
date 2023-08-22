@@ -25,6 +25,7 @@ def main():
     parser.add_argument('--from_yml', type=str, required=False, nargs=1, help="")
     parser.add_argument('--text_out', type=str, required=False, nargs=1, help="")
     parser.add_argument('--img_out', type=str, required=False, nargs=1, help="")
+    parser.add_argument('--img_out_n', type=int, required=False, nargs=1, default=0, help="")
     parser.add_argument('--check_mode', required=False, default=False, action="store_true", help="")
     parser.add_argument('--simulation', required=False, default=False, action="store_true", help="")
     parser.add_argument('--pertubation_deg', type=float, required=False, nargs=1, default=0.2, help="")
@@ -36,6 +37,7 @@ def main():
 
     if args.check_mode:
         opts["check_mode"] = True
+    opts["img_out_n"] = args.img_out_n[0]
 
     if args.from_yml:
         yml_path = Path(args.from_yml[0]).expanduser().resolve()
@@ -69,10 +71,8 @@ def main():
 
             assert len(readers) == len(landmark_imcoords), "Number of readers must match first dm of landmark_imcoords"
 
-            for fr_idx in analysis_frames:
-                plot_frames(yml_path.stem, path, readers, offsets, analysis_frames, calibs, landmark_imcoords,
-                            landmarks, positions, oris,
-                            fr_idx)
+            plot_frames(analysis_frames, calibs, landmark_imcoords, landmarks, error_repro, offsets, oris, path,
+                        positions, readers, yml_path, opts)
     elif args.simulation:
         from bboVisO.simulation import run_simulated_data  # noqa: E402
 
@@ -81,9 +81,6 @@ def main():
     else:
         raise Exception("Data or simulation needs to be provided")
     pass
-
-
-
 
 
 if __name__ == '__main__':

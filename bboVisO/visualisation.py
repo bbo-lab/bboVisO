@@ -114,9 +114,26 @@ def create_wavefront_cylinders(start_points, end_points, radius, output_file):
                 vertex_count += 4
 
 
-def plot_frames(name, path, readers, offsets, analysis_frames, calibs, landmark_imcoords,
-                landmarks, positions, oris_flu,
-                fr_idx):
+def plot_frames(analysis_frames, calibs, landmark_imcoords, landmarks, error_repro, offsets, oris, path, positions,
+                readers, yml_path, opts):
+    abserr = np.sqrt(np.sum(error_repro ** 2, axis=-1))
+    aggr_error = np.nanmax(abserr, axis=-1)
+
+    if opts["img_out_n"] == 0:
+        img_out_n = len(analysis_frames)
+    else:
+        img_out_n = opts["img_out_n"]
+
+    error_n = min(len(analysis_frames), img_out_n)
+    error_frames = analysis_frames[np.argpartition(aggr_error, -error_n)[-error_n:]]
+
+    for fr_idx in error_frames:
+        plot_frame(yml_path.stem, path, readers, offsets, analysis_frames, calibs, landmark_imcoords,
+                   landmarks, positions, oris, error_repro, fr_idx)
+
+
+def plot_frame(name, path, readers, offsets, analysis_frames, calibs, landmark_imcoords, landmarks, positions,
+               oris_flu, error_repro, fr_idx):
     cs = Camerasystem.from_calibs(calibs)
 
     a_idx = np.where(analysis_frames == fr_idx)[0][0]
@@ -131,7 +148,7 @@ def plot_frames(name, path, readers, offsets, analysis_frames, calibs, landmark_
         cam_path = os.path.join(path, f"cam{cam_idx}")
         save_path = os.path.join(cam_path, name) + f"_{fr_idx}.png"
         try:
-            im = r.get_data(fr_idx+o)
+            im = r.get_data(fr_idx + o)
             plt.imshow(im)
             for i_lm, lm in enumerate(im_c[a_idx]):
                 if not np.any(np.isnan(lm)) and not np.any(np.isnan(im_c_proj[i_lm])):
@@ -141,7 +158,7 @@ def plot_frames(name, path, readers, offsets, analysis_frames, calibs, landmark_
                     plt.plot(*np.vstack((lm, im_c_proj[i_lm])).T, "k--", markersize=1, markeredgewidth=0.1)
         except StopIteration:
             pass
-        plt.title(f"Frame {fr_idx} ({fr_idx+o}), Cam {cam_idx}")
+        plt.title(f"Frame {fr_idx} ({fr_idx + o}), Cam {cam_idx}")
         # plt.show()
 
         if save_path is not None:
