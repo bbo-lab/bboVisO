@@ -103,13 +103,12 @@ def run(landmark_labels, landmark_coordinates, calibs, offsets, opts):
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
 
     if opts["check_mode"]:
-        positions_opt, oris_flu_opt = viso.interpolate_high_error(positions_opt, oris_flu_opt,
-                                                                  landmark_imcoords[:, :, landmarks_mask], calibs,
-                                                                  opts,
+        positions_opt, oris_flu_opt = viso.interpolate_high_error(positions_opt, oris_flu_opt, calibs, opts,
                                                                   landmarks=landmarks_opt[landmarks_mask],
                                                                   optimize=["positions", "oris"],
-                                                                  landmarks_optimize=landmarks_optimize[landmarks_mask]
-                                                                  )
+                                                                  landmark_imcoords=landmark_imcoords[:, :,
+                                                                                    landmarks_mask],
+                                                                  landmarks_optimize=landmarks_optimize[landmarks_mask])
 
     vars_free_opt, args_opt = \
         viso.make_optim_input(calibs, opts, landmarks_opt[landmarks_mask], positions_opt,

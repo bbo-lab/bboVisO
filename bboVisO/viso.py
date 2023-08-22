@@ -28,6 +28,7 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
 
     t = time.time()
     precalc = get_precalc()
+    landmark_vecs = landmark_vecs_from_imcoords(landmark_imcoords, calibs)
     for opt in optimize:
         # If we are doing a full optimization, increase to full step count steps
         if isinstance(opt, list):
@@ -38,7 +39,9 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
         vars_free, objfun_args, optim_args = make_optim_input(calibs, opts,
                                                               landmarks_init, positions_init, oris_flu_opt_init,
                                                               optimize=opt, landmarks_optimize=landmarks_optimize,
-                                                              precalc=precalc, landmark_imcoords=landmark_imcoords)
+                                                              precalc=precalc,
+                                                              landmark_imcoords=landmark_imcoords,
+                                                              landmark_vecs=landmark_vecs)
 
         min_result: OptimizeResult = least_squares(objfun_repro_wrapper,
                                                    vars_free,
@@ -54,13 +57,12 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
         print(f"Max pos shift {max_pos_shift}")
 
         if opts["interpolate_high_error"]:
-            positions_init, oris_flu_opt_init = interpolate_high_error(positions_init, oris_flu_opt_init,
-                                                                       landmark_imcoords, calibs,
-                                                                       opts,
+            positions_init, oris_flu_opt_init = interpolate_high_error(positions_init, oris_flu_opt_init, calibs, opts,
                                                                        landmarks=landmarks_init,
                                                                        optimize=["positions", "oris"],
-                                                                       landmarks_optimize=landmarks_optimize
-                                                                       )
+                                                                       landmark_vecs=landmark_vecs,
+                                                                       landmark_imcoords=landmark_imcoords,
+                                                                       landmarks_optimize=landmarks_optimize)
 
     print(f"Optimization took {time.time() - t} s")
 
@@ -198,11 +200,9 @@ def objfun_repro_jacobian_wrapper(free_vars, args):
 def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None,
                      optimize=None, landmarks_optimize=None,
                      precalc=None, landmark_imcoords=None, landmark_vecs=None):
-    cs = Camerasystem.from_calibs(calibs)
+
     if landmark_vecs is None and landmark_imcoords is not None:
-        landmark_vecs = np.nanmean(cs.get_camera_lines(landmark_imcoords)[0], axis=0)
-        landmark_vecs /= np.linalg.norm(landmark_vecs, axis=-1, keepdims=True)  # Norm in case of averaging
-        landmark_vecs[np.all(landmark_vecs == 0, axis=-1)] = np.nan
+        landmark_vecs = landmark_vecs_from_imcoords(landmark_imcoords, calibs)
 
     vars_free, vars_full, mask_free_input = \
         make_initialization(landmark_vecs, calibs, opts, landmarks, positions,
@@ -229,6 +229,14 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
     return vars_free, obfun_args, optim_args
 
 
+def landmark_vecs_from_imcoords(landmark_imcoords, calibs):
+    cs = Camerasystem.from_calibs(calibs)
+    landmark_vecs = np.nanmean(cs.get_camera_lines(landmark_imcoords)[0], axis=0)
+    landmark_vecs /= np.linalg.norm(landmark_vecs, axis=-1, keepdims=True)  # Norm in case of averaging
+    landmark_vecs[np.all(landmark_vecs == 0, axis=-1)] = np.nan
+    return landmark_vecs
+
+
 def make_initialization(landmark_vectors, calibs, opts, landmarks=None, positions=None, oris_flu=None,
                         optimize=None, landmarks_optimize=None):
     if optimize is None:
@@ -249,7 +257,7 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
     # Init with fixed first orientation and position
     # Init landmarks as extensions of t=0 camera vecs
     # Fix relative x position to landmark 1
-    cs = Camerasystem.from_calibs(calibs)
+    # cs = Camerasystem.from_calibs(calibs)
     # cs.cameras[0]["camera"].set_center_pixel(np.array([[960, 512]]))
 
     # Initializations
@@ -430,17 +438,14 @@ def make_jacobian_sparsity_mask(k, n, mask_free_input):
     return jac_sparsity[:, mask_free_input]
 
 
-def interpolate_high_error(positions_opt, oris_flu_opt,
-                           landmark_imcoords, calibs,
-                           opts,
-                           landmarks,
-                           optimize,
-                           landmarks_optimize=None
-                           ):
+def interpolate_high_error(positions_opt, oris_flu_opt, calibs, opts, landmarks, optimize, landmark_imcoords=None,
+                           landmark_vecs=None, landmarks_optimize=None):
     vars_free, objfun_args, optim_args = make_optim_input(calibs, opts,
                                                           landmarks, positions_opt, oris_flu_opt,
                                                           optimize=optimize, landmarks_optimize=landmarks_optimize,
-                                                          precalc=precalc, landmark_imcoords=landmark_imcoords)
+                                                          precalc=precalc,
+                                                          landmark_imcoords=landmark_imcoords,
+                                                          landmark_vecs=landmark_vecs)
     repro_error = objfun_repro_wrapper(vars_free, objfun_args, no_ravel=True)
     frame_max_errors = np.nanmax(np.nansum(repro_error ** 2, axis=-1), axis=-1)
 
