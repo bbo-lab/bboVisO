@@ -135,3 +135,27 @@ def build_vector_bundle(base_bundle: np.ndarray, add_bundles: np.ndarray):
 
 if __name__ == '__main__':
     test_umeyama()
+
+
+# Align a set of rotation vectors to one direction (instead of rotating by 360-a degree into the other direction)
+#  Only vectors where mask is true are accepted as reference
+def align_rotation_vectors(rotvecs, mask=None):
+    if mask is None:
+        mask = np.ones(len(rotvecs), dtype=bool)
+
+    angles = np.linalg.norm(rotvecs, axis=-1)
+
+    reference = None
+    for i_rv, rv in enumerate(rotvecs):
+        if reference is None:
+            reference = rv
+            continue
+
+        if np.linalg.norm(reference - rv/angles[i_rv]*(angles[i_rv]-2*np.pi))<np.linalg.norm(reference - rv):
+            rv[:] = rv/angles[i_rv]*(angles[i_rv]-2*np.pi)
+
+        if mask[i_rv]:
+            reference = rv
+
+    return rotvecs
+

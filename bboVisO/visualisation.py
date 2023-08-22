@@ -114,7 +114,7 @@ def create_wavefront_cylinders(start_points, end_points, radius, output_file):
                 vertex_count += 4
 
 
-def plot_frames(name, path, readers, analysis_frames, calibs, landmark_imcoords,
+def plot_frames(name, path, readers, offsets, analysis_frames, calibs, landmark_imcoords,
                 landmarks, positions, oris_flu,
                 fr_idx):
     cs = Camerasystem.from_calibs(calibs)
@@ -126,21 +126,22 @@ def plot_frames(name, path, readers, analysis_frames, calibs, landmark_imcoords,
     dirs = ori_flu.inv().apply(landmarks - pos)
     imcoords_proj = cs.project(dirs)
 
-    for cam_idx, (r, im_c_proj, im_c) in enumerate(zip(readers, imcoords_proj, landmark_imcoords)):
+    for cam_idx, (r, im_c_proj, im_c, o) in enumerate(zip(readers, imcoords_proj, landmark_imcoords, offsets)):
         plt.figure(dpi=600, figsize=(5, 3))
         cam_path = os.path.join(path, f"cam{cam_idx}")
         save_path = os.path.join(cam_path, name) + f"_{fr_idx}.png"
         try:
-            im = r.get_data(fr_idx)
+            im = r.get_data(fr_idx+o)
             plt.imshow(im)
             for i_lm, lm in enumerate(im_c[a_idx]):
                 if not np.any(np.isnan(lm)) and not np.any(np.isnan(im_c_proj[i_lm])):
                     ph0 = plt.plot(*lm, "+", markersize=6, markeredgewidth=0.3)[0]
                     ph1 = plt.plot(*im_c_proj[i_lm], "x", markersize=6, markeredgewidth=0.3)[0]
                     ph1.set_color(ph0.get_color())
+                    plt.plot(*np.vstack((lm, im_c_proj[i_lm])).T, "k--", markersize=1, markeredgewidth=0.1)
         except StopIteration:
             pass
-        plt.title(f"Frame {fr_idx}, Cam {cam_idx}")
+        plt.title(f"Frame {fr_idx} ({fr_idx+o}), Cam {cam_idx}")
         # plt.show()
 
         if save_path is not None:

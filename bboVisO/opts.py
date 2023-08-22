@@ -10,5 +10,11 @@ def get_opts():
             'tr_solver': 'lsmr',  # 'lsmr' is forced since jac_sparsity is also passed to least_squares function
             'max_nfev': 500,
             'verbose': 2,
-        }
+        },
+        'far_first': False,  # Optimize on only far landmarks first
+        'close_first': False,  # Optimize on only close landmarks first
+        'interpolate_high_error': True,  # After a first optimization run, interpolate position and orientation of
+                                         #  high error frames as initialization for next opimization
+        'check_mode': False,  # as interpolate_high_error, but after last opimization. This often makes finding label
+                              #  errors much easier
     }
