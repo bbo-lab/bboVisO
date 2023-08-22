@@ -53,33 +53,16 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
 
         print(f"Max pos shift {max_pos_shift}")
 
-        positions_opt, oris_flu_opt = interpolate_high_error(positions_opt, oris_flu_opt,
-                                                                  landmark_imcoords[:, :, landmarks_mask], calibs,
-                                                                  opts,
-                                                                  landmarks=landmarks_opt[landmarks_mask],
-                                                                  optimize=["positions", "oris"],
-                                                                  landmarks_optimize=landmarks_optimize[landmarks_mask]
-                                                                  )
+        if opts["interpolate_high_error"]:
+            positions_init, oris_flu_opt_init = interpolate_high_error(positions_init, oris_flu_opt_init,
+                                                                       landmark_imcoords, calibs,
+                                                                       opts,
+                                                                       landmarks=landmarks_init,
+                                                                       optimize=["positions", "oris"],
+                                                                       landmarks_optimize=landmarks_optimize
+                                                                       )
 
     print(f"Optimization took {time.time() - t} s")
-
-    # Test for 3d optimization in postprocessing
-    # vars_free, args = viso.make_optim_input(calibs, opts, landmarks_opt, positions_opt, oris_flu_opt, optimize=opt,
-    #                                             precalc=precalc, landmark_imcoords=landmark_imcoords)
-    #
-    # min_result: OptimizeResult = least_squares(viso.objfun_3d_wrapper,
-    #                                            vars_free,
-    #                                            jac="2-point",
-    #                                            bounds=np.array([[-np.inf, np.inf]] * vars_free.size).T,
-    #                                            args=[args],
-    #                                            **opts_optim
-    #                                            )
-    #
-    # landmarks_opt, positions_opt, oris_flu_opt = viso.unravel_vars(min_result.x, args)[:3]
-    # landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results(landmarks,
-    #                                                                             landmarks_opt, positions_opt, oris_flu_opt)
-    #
-    # print(f"Max position error: {np.max(np.linalg.norm(positions-positions_aligned, axis=-1))}")
 
     return landmarks_init, positions_init, oris_flu_opt_init
 
@@ -459,7 +442,7 @@ def interpolate_high_error(positions_opt, oris_flu_opt,
                                                           optimize=optimize, landmarks_optimize=landmarks_optimize,
                                                           precalc=precalc, landmark_imcoords=landmark_imcoords)
     repro_error = objfun_repro_wrapper(vars_free, objfun_args, no_ravel=True)
-    frame_max_errors = np.nanmax(np.nansum(repro_error**2, axis=-1), axis=-1)
+    frame_max_errors = np.nanmax(np.nansum(repro_error ** 2, axis=-1), axis=-1)
 
     frames = np.array(list(range(len(frame_max_errors))))
 

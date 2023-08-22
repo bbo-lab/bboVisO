@@ -89,7 +89,7 @@ def run(landmark_labels, landmark_coordinates, calibs, offsets, opts):
                                          )
         landmarks_opt[landmarks_mask] = landmarks_opt_mask
 
-    # Optimize p&o for all used landmarks
+    # Optimize p&o, then p&o&l for all used landmarks
     landmarks_mask = landmarks_use
     landmarks_opt_mask, positions_opt, oris_flu_opt = \
         viso.infer_position_attitude(landmark_imcoords[:, :, landmarks_mask], calibs,
@@ -97,31 +97,7 @@ def run(landmark_labels, landmark_coordinates, calibs, offsets, opts):
                                      landmarks_init=landmarks_opt[landmarks_mask],
                                      positions_init=positions_opt,
                                      oris_flu_opt_init=oris_flu_opt,
-                                     optimize=[["positions", "oris"]],  # , "positions", "landmarks"
-                                     landmarks_optimize=landmarks_optimize[landmarks_mask]
-                                     )
-
-    positions_opt, oris_flu_opt = viso.interpolate_high_error(positions_opt, oris_flu_opt,
-                                                              landmark_imcoords[:, :, landmarks_mask], calibs,
-                                                              opts,
-                                                              landmarks=landmarks_opt[landmarks_mask],
-                                                              optimize=["positions", "oris"],
-                                                              landmarks_optimize=landmarks_optimize[landmarks_mask]
-                                                              )
-
-    landmarks_opt[landmarks_mask] = landmarks_opt_mask
-
-
-
-    # Optimize p&o&l for all used landmarks
-    landmarks_mask = landmarks_use
-    landmarks_opt_mask, positions_opt, oris_flu_opt = \
-        viso.infer_position_attitude(landmark_imcoords[:, :, landmarks_mask], calibs,
-                                     opts_optim, opts,
-                                     landmarks_init=landmarks_opt[landmarks_mask],
-                                     positions_init=positions_opt,
-                                     oris_flu_opt_init=oris_flu_opt,
-                                     optimize=[["positions", "oris", "landmarks"]],
+                                     optimize=[["positions", "oris"],["positions", "oris", "landmarks"]],
                                      landmarks_optimize=landmarks_optimize[landmarks_mask]
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
