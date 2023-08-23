@@ -4,7 +4,8 @@ import os.path
 import argparse
 from pathlib import Path
 
-from tetherlessextractor.data_object import Data
+import yaml
+
 from bboVisO.acm_labels import load as acm_load
 from svidreader import SVidReader
 
@@ -21,15 +22,26 @@ def main():
     global opts, path
     # Some debug output
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument('--nodebug', required=False, default=False, action="store_true", help="")
-    parser.add_argument('--from_yml', type=str, required=False, nargs=1, help="")
-    parser.add_argument('--text_out', type=str, required=False, nargs=1, help="")
-    parser.add_argument('--img_out', type=str, required=False, nargs=1, help="")
-    parser.add_argument('--img_out_n', type=int, required=False, nargs=1, default=0, help="")
-    parser.add_argument('--check_mode', required=False, default=False, action="store_true", help="")
-    parser.add_argument('--simulation', required=False, default=False, action="store_true", help="")
-    parser.add_argument('--pertubation_deg', type=float, required=False, nargs=1, default=0.2, help="")
-    parser.add_argument('--landmark_radius', type=float, required=False, nargs=1, default=30, help="")
+    parser.add_argument('--nodebug', required=False, default=False, action="store_true",
+                        help="Decrease debug output")
+    parser.add_argument('--from_yml', type=str, required=False, nargs=1,
+                        help="Input configuration")
+    parser.add_argument('--tetherless', required=False, default=False, action="store_true",
+                        help="The YML file is in tetherless format")
+    parser.add_argument('--text_out', type=str, required=True, nargs=1,
+                        help="Folder for text output")
+    parser.add_argument('--img_out', type=str, required=False, nargs=1,
+                        help="Folder for image output")
+    parser.add_argument('--img_out_n', type=int, required=False, nargs=1, default=0,
+                        help="Number of images to generate starting from highest maxerror")
+    parser.add_argument('--check_mode', required=False, default=False, action="store_true",
+                        help="Interpolate high error frames after last optimization")
+    parser.add_argument('--simulation', required=False, default=False, action="store_true",
+                        help="Simulate input data for testing purposes")
+    parser.add_argument('--pertubation_deg', type=float, required=False, nargs=1, default=0.2,
+                        help="Landmark direction pertubation in simulation")
+    parser.add_argument('--landmark_radius', type=float, required=False, nargs=1, default=30,
+                        help="Landmark distance in simulation")
     args = parser.parse_args()
     if not args.nodebug:
         viso.debug = True
@@ -41,19 +53,30 @@ def main():
 
     if args.from_yml:
         yml_path = Path(args.from_yml[0]).expanduser().resolve()
-        data_obj = Data.load(yml_path, {"storage": "/media/smb/soma-fs.ad01.caesar.de/bbo/"})
-        data = data_obj.data
+
+        if args.tetherless:
+            import tetherless_data
+            data = tetherless_data.load(yml_path)
+        else:
+            with open(yml_path, 'r') as file:
+                data = yaml.safe_load(file)
+
+        calibration = data["calibration"]
+        offsets = data["cam_offsets"]
+        acm_labels = data["acm_labels"]
+        landmark_coordinates = data["landmark_coordinates"]
+        if "videos" in data:
+            videos = data["videos"]
+        else:
+            videos = []
+
         from bboVisO.process import run  # noqa: E402
-
-        calibration = data["battery_cycle"]["landmark_labels"]["calibration"]
-        calibs = np.load(data["dataset"]["calibration_headcam"][calibration], allow_pickle=True)[()]["calibs"]
-
-        offsets = data_obj.get_headcam_frame_offsets()
+        calibs = np.load(calibration, allow_pickle=True)[()]["calibs"]
 
         landmarks, positions, oris, analysis_frames, landmark_imcoords, error_repro, landmark_labels = \
             run(
-                landmark_labels=acm_load(data["battery_cycle"]["landmark_labels"]["file"])["labels"],
-                landmark_coordinates=data["battery_cycle"]["landmark_coordinates"],
+                landmark_labels=acm_load(acm_labels)["labels"],
+                landmark_coordinates=landmark_coordinates,
                 calibs=calibs,
                 offsets=offsets,
                 opts=opts)
@@ -66,8 +89,7 @@ def main():
 
         if args.img_out:
             path = Path(os.path.join(args.img_out[0], yml_path.stem)).expanduser().resolve().as_posix()
-            readers = [SVidReader(data["battery_cycle"]["headcam"][vidname]["video"])
-                       for vidname in data["battery_cycle"]["landmark_labels"]["videos"]]
+            readers = [SVidReader(vid) for vid in videos]
 
             assert len(readers) == len(landmark_imcoords), "Number of readers must match first dm of landmark_imcoords"
 
