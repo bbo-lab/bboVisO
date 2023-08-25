@@ -11,7 +11,10 @@ def load(yml_path):
         "acm_labels": data_tl["battery_cycle"]["landmark_labels"]["file"],
         "landmark_coordinates": data_tl["battery_cycle"]["landmark_coordinates"],
         "videos": [data_tl["battery_cycle"]["headcam"][vidname]["video"]
-                   for vidname in data_tl["battery_cycle"]["landmark_labels"]["videos"]]
+                   for vidname in data_tl["battery_cycle"]["landmark_labels"]["videos"]],
+        "frame_range": data_tl_obj.get_frame_range()
     }
+
+
 
     return data

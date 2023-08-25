@@ -3,6 +3,7 @@ import numpy as np
 import os.path
 import argparse
 from pathlib import Path
+import sys
 
 import yaml
 
@@ -32,7 +33,7 @@ def main():
                         help="Folder for text output")
     parser.add_argument('--img_out', type=str, required=False, nargs=1,
                         help="Folder for image output")
-    parser.add_argument('--img_out_n', type=int, required=False, nargs=1, default=0,
+    parser.add_argument('--img_out_n', type=int, required=False, nargs=1, default=[0],
                         help="Number of images to generate starting from highest maxerror")
     parser.add_argument('--check_mode', required=False, default=False, action="store_true",
                         help="Interpolate high error frames after last optimization")
@@ -69,6 +70,9 @@ def main():
             videos = data["videos"]
         else:
             videos = []
+
+        if "frame_range" in data:
+            opts["frame_range"] = data["frame_range"]
 
         from bboVisO.process import run  # noqa: E402
         calibs = np.load(calibration, allow_pickle=True)[()]["calibs"]

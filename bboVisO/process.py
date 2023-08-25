@@ -21,7 +21,9 @@ def run(landmark_labels, landmark_coordinates, calibs, offsets, opts):
 
     # Frames with labels
     detected_frames = acm_labels.get_labeled_frames(landmark_labels)
-    # detected_frames = np.array([7484])
+    detected_frames = detected_frames[np.logical_and(opts["frame_range"][0] <=
+                                                     detected_frames, detected_frames <= opts["frame_range"][1])]
+
     # Marked labels
     detected_labels = sorted(acm_labels.get_labels(landmark_labels))
 
@@ -36,9 +38,6 @@ def run(landmark_labels, landmark_coordinates, calibs, offsets, opts):
                                             landmarks_identity=landmarks_identity)
 
     sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) > 3
-    # sufficient_mask[:] = False
-    # sufficient_mask[241:300] = True
-    # sufficient_mask = np.logical_and(detected_frames > 10000, detected_frames < 20000)
 
     detected_frames = detected_frames[sufficient_mask]
     landmark_imcoords = landmark_imcoords[:, sufficient_mask]
