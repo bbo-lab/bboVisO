@@ -68,7 +68,7 @@ def main():
         if "videos" in data:
             videos = data["videos"]
         else:
-            videos = []
+            videos = None
 
         from bboVisO.process import run  # noqa: E402
         calibs = np.load(calibration, allow_pickle=True)[()]["calibs"]
@@ -84,10 +84,9 @@ def main():
         if args.text_out:
             path = Path(os.path.join(args.text_out[0], yml_path.stem)).expanduser().resolve().as_posix()
             os.makedirs(path, exist_ok=True)
-            save_to_text(yml_path.stem, path,
-                         analysis_frames, landmarks, positions, oris, error_repro, landmark_labels)
+            save_to_text(yml_path.stem, path, analysis_frames, landmarks, positions, oris, error_repro, landmark_labels)
 
-        if args.img_out:
+        if args.img_out and videos is not None:
             path = Path(os.path.join(args.img_out[0], yml_path.stem)).expanduser().resolve().as_posix()
             readers = [SVidReader(vid) for vid in videos]
 

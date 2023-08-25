@@ -128,6 +128,7 @@ def plot_frames(analysis_frames, calibs, landmark_imcoords, landmarks, error_rep
     error_frames = analysis_frames[np.argpartition(aggr_error, -error_n)[-error_n:]]
 
     for fr_idx in error_frames:
+        print(f"Plotting frame {fr_idx}")
         plot_frame(yml_path.stem, path, readers, offsets, analysis_frames, calibs, landmark_imcoords,
                    landmarks, positions, oris, error_repro, fr_idx)
 
