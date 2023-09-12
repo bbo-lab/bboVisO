@@ -12,40 +12,7 @@ def align_positions_orientations(reference_points, points, positions, orientatio
     assert fix_indices is None or len(fix_indices) == 2, "Needs exactly 2 fix indices to fix two points" \
                                                          " and orient the rest"
 
-    if fix_indices is None:
-        rot, t, s = umeyama(points, reference_points)
-    else:
-        # Align 2 points at fix_indices
-        ref_line = np.diff(reference_points[fix_indices, ...], axis=0)
-        ref_line_len = np.linalg.norm(ref_line)
-        ref_line /= ref_line_len
-        p_line = np.diff(points[fix_indices, ...], axis=0)
-        p_line_len = np.linalg.norm(p_line)
-        p_line /= p_line_len
-
-        s = ref_line_len / p_line_len
-        with warnings.catch_warnings():
-            # We know that the problem is underdefined, but we don't care because we solve
-            # the free rotation afterwards.
-            warnings.simplefilter("ignore")
-            rot = R.align_vectors(ref_line, p_line)[0].as_matrix()
-        t = reference_points[fix_indices[0], ...] - points[fix_indices[0], ...] @ rot.T * s
-
-        # Align the other points by a rotation around the fix_indices axis
-        points = (points @ rot.T * s + t) - reference_points[fix_indices[0]]
-        reference_points = reference_points - reference_points[fix_indices[0]]
-
-        axis = np.diff(reference_points[fix_indices, ...], axis=0)
-        axis /= np.linalg.norm(axis, axis=-1)[..., np.newaxis]
-        # TODO: There's probably a more elegant way that optimization?
-        xopt = fmin(
-            func=lambda x: np.nansum((R.from_rotvec(x * axis).apply(points) - reference_points) ** 2),
-            x0=0,
-            disp=0)
-
-        rot2 = R.from_rotvec(xopt[0] * axis).as_matrix()[0]
-        rot = rot2 @ rot
-        t = rot2 @ (t - reference_points[fix_indices[0]].T) + reference_points[fix_indices[0]].T
+    rot, t, s = align(reference_points, points, fix_indices)
 
     positions_aligned = []
     for p in positions:
@@ -58,6 +25,46 @@ def align_positions_orientations(reference_points, points, positions, orientatio
     pass
 
     return positions_aligned, orientations_aligned
+
+
+def align(reference_points, points, fix_indices=None):
+    if fix_indices is None:
+        rot, t, s = umeyama(points, reference_points)
+    else:
+        # Align 2 points at fix_indices
+        ref_line = np.diff(reference_points[fix_indices, ...], axis=0)
+        ref_line_len = np.linalg.norm(ref_line)
+        ref_line /= ref_line_len
+        p_line = np.diff(points[fix_indices, ...], axis=0)
+        p_line_len = np.linalg.norm(p_line)
+        p_line /= p_line_len
+
+        s = ref_line_len / p_line_len
+
+        with warnings.catch_warnings():
+            # We know that the problem is underdefined, but we don't care because we solve
+            # the free rotation afterwards.
+            warnings.simplefilter("ignore")
+            rot = R.align_vectors(ref_line, p_line)[0].as_matrix()
+        t = reference_points[fix_indices[0], ...] - points[fix_indices[0], ...] @ rot.T * s
+
+        # Align the other points by a rotation around the fix_indices axis
+        points_disp = (points @ rot.T * s + t) - reference_points[fix_indices[0]]
+        reference_points_disp = reference_points - reference_points[fix_indices[0]]
+
+        axis = ref_line
+        # TODO: There's probably a more elegant way than optimization?
+        xopt = fmin(
+            func=lambda x: np.nansum((R.from_rotvec(x * axis).apply(points_disp) - reference_points_disp) ** 2),
+            x0=0,
+            disp=0)
+
+        rot2 = R.from_rotvec(xopt[0] * axis).as_matrix()[0]
+
+        rot = rot2 @ rot
+        t = (t - reference_points[fix_indices[0]].T) @ rot2.T + reference_points[fix_indices[0]].T
+
+    return rot, t, s
 
 
 def umeyama(src, dst, estimate_scale=True):
