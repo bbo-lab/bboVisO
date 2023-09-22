@@ -114,55 +114,63 @@ def create_wavefront_cylinders(start_points, end_points, radius, output_file):
                 vertex_count += 4
 
 
-def plot_frames(analysis_frames, calibs, landmark_imcoords, landmarks, error_repro, offsets, oris, path, positions,
-                readers, yml_path, opts):
+def plot_frames(calibs, res_time_base,
+                oris_flu, path, positions, landmark_imcoords, error_repro,
+                landmarks, landmark_frames,
+                cam_time_bases, readers,
+                yml_path, opts):
     abserr = np.sqrt(np.sum(error_repro ** 2, axis=-1))
     aggr_error = np.nanmax(abserr, axis=-1)
 
+    cs = Camerasystem.from_calibs(calibs)
+
     if opts["img_out_n"] == 0:
-        img_out_n = len(analysis_frames)
+        img_out_n = len(res_time_base)
     else:
         img_out_n = opts["img_out_n"]
 
-    error_n = min(len(analysis_frames), img_out_n)
-    error_frames = analysis_frames[np.argpartition(aggr_error, -error_n)[-error_n:]]
+    error_n = min(len(res_time_base), img_out_n)
+    error_idxs = np.argpartition(aggr_error, -error_n)[-error_n:]
 
-    for fr_idx in error_frames:
-        print(f"Plotting frame {fr_idx}")
-        plot_frame(yml_path.stem, path, readers, offsets, analysis_frames, calibs, landmark_imcoords,
-                   landmarks, positions, oris, error_repro, fr_idx)
+    for err_idx in error_idxs:
+        error_time = res_time_base[err_idx]
+
+        pos = positions[err_idx]
+        ori_flu = R.from_rotvec(oris_flu[err_idx])
+
+        dirs = ori_flu.inv().apply(landmarks - pos)
+        imcoords_proj = cs.project(dirs)
+
+        for i_cam, r in enumerate(readers):
+            idx = np.where(error_time == cam_time_bases[i_cam])[0]
+            if len(idx) > 0:
+                idx = idx[0]
+                print(f"Plotting frame {err_idx}, cam {i_cam}")
+                plot_frame(yml_path.stem, path, i_cam, r,
+                           landmark_imcoords[i_cam, err_idx], imcoords_proj[i_cam],
+                           error_time, landmark_frames, idx)
 
 
-def plot_frame(name, path, readers, offsets, analysis_frames, calibs, landmark_imcoords, landmarks, positions,
-               oris_flu, error_repro, fr_idx):
-    cs = Camerasystem.from_calibs(calibs)
+def plot_frame(name, path, cam_idx, reader, imcoords, imcoords_proj, error_time, landmark_frames, idx):
+    cam_path = os.path.join(path, f"cam{cam_idx}")
+    plt.figure(dpi=600, figsize=(5, 3))
+    save_path = os.path.join(cam_path, name) + f"_{int(error_time * 1e6)}.png"
+    frame_idx = landmark_frames[idx]
+    try:
+        im = reader.get_data(frame_idx)
+        plt.imshow(im)
+        for i_lm, lm in enumerate(imcoords):
+            if not np.any(np.isnan(lm)) and not np.any(np.isnan(imcoords_proj[i_lm])):
+                ph0 = plt.plot(*lm, "+", markersize=6, markeredgewidth=0.3)[0]
+                ph1 = plt.plot(*imcoords_proj[i_lm], "x", markersize=6, markeredgewidth=0.3)[0]
+                ph1.set_color(ph0.get_color())
+                plt.plot(*np.vstack((lm, imcoords_proj[i_lm])).T, "k--", markersize=1, markeredgewidth=0.1)
+    except StopIteration:
+        pass
+    plt.title(f"Frame {frame_idx}@ cam {cam_idx}, Time {error_time}")
+    # plt.show()
 
-    a_idx = np.where(analysis_frames == fr_idx)[0][0]
-    pos = positions[a_idx]
-    ori_flu = R.from_rotvec(oris_flu[a_idx])
-
-    dirs = ori_flu.inv().apply(landmarks - pos)
-    imcoords_proj = cs.project(dirs)
-
-    for cam_idx, (r, im_c_proj, im_c, o) in enumerate(zip(readers, imcoords_proj, landmark_imcoords, offsets)):
-        plt.figure(dpi=600, figsize=(5, 3))
-        cam_path = os.path.join(path, f"cam{cam_idx}")
-        save_path = os.path.join(cam_path, name) + f"_{fr_idx}.png"
-        try:
-            im = r.get_data(fr_idx + o)
-            plt.imshow(im)
-            for i_lm, lm in enumerate(im_c[a_idx]):
-                if not np.any(np.isnan(lm)) and not np.any(np.isnan(im_c_proj[i_lm])):
-                    ph0 = plt.plot(*lm, "+", markersize=6, markeredgewidth=0.3)[0]
-                    ph1 = plt.plot(*im_c_proj[i_lm], "x", markersize=6, markeredgewidth=0.3)[0]
-                    ph1.set_color(ph0.get_color())
-                    plt.plot(*np.vstack((lm, im_c_proj[i_lm])).T, "k--", markersize=1, markeredgewidth=0.1)
-        except StopIteration:
-            pass
-        plt.title(f"Frame {fr_idx} ({fr_idx + o}), Cam {cam_idx}")
-        # plt.show()
-
-        if save_path is not None:
-            os.makedirs(Path(save_path).parent.as_posix(), exist_ok=True)
-            plt.savefig(save_path)
-        plt.close()
+    if save_path is not None:
+        os.makedirs(Path(save_path).parent.as_posix(), exist_ok=True)
+        plt.savefig(save_path)
+    plt.close()

@@ -19,5 +19,5 @@ def get_opts():
                                          #  high error frames as initialization for next opimization
         'check_mode': False,  # as interpolate_high_error, but after last opimization. This often makes finding label
                               #  errors much easier
-        'frame_range': [0, sys.maxsize]
+        'time_range': [0, 3600*24*365]
     }
