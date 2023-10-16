@@ -8,7 +8,7 @@ def load(yml_path):
     calibration_type = data_tl["battery_cycle"]["landmark_labels"]["calibration"]
     data = {
         "calibration": data_tl["dataset"]["calibration_headcam"][calibration_type],
-        "cam_offsets": data_tl_obj.get_headcam_time_offsets()/data_tl_obj.time_factor,
+        "cam_offsets": data_tl_obj.get_headcam_time_offsets(timebase="battery_cycle")/data_tl_obj.time_factor,
         "cam_fps": data_tl_obj.get_headcam_fps(),
         "acm_labels": data_tl["battery_cycle"]["landmark_labels"]["file"],
         "landmark_coordinates": data_tl["dataset"]["landmark_coordinates"],
