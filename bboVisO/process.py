@@ -53,7 +53,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     landmark_imcoords, time_base = interpolate(landmark_imcoords, time_base, time_base, calibs)
 
     # Cut down to points with sufficient landmarks
-    sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) > 3
+    sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) >= opts["min_labels"]
 
     time_base = time_base[sufficient_mask]
     landmark_imcoords = landmark_imcoords[:, sufficient_mask]

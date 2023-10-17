@@ -217,6 +217,7 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
         'mask_opt': mask_free_input,  # Mask of free vars within all vars
         'landmark_imcoords': landmark_imcoords,
         'landmark_vecs': landmark_vecs,
+        'single_position': opts["single_position"],
         'calibs': calibs,
         'precalc': get_precalc() if precalc is None else precalc
     }
@@ -245,10 +246,15 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
     k = landmark_vectors.shape[0]
     n = landmark_vectors.shape[1]
 
+    if opts["single_position"]:
+        k_p = 1
+    else:
+        k_p = k
+
     edges = np.array([0,
                       n * 3,
-                      n * 3 + k * 3,
-                      n * 3 + k * 3 + k * 3
+                      n * 3 + k_p * 3,
+                      n * 3 + k_p * 3 + k * 3
                       ])
 
     vars_full = np.full(edges[-1], np.nan)
@@ -268,10 +274,10 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
         landmarks_init = build_vector_bundle(landmark_vectors[0], landmark_vectors[1:]) * 100
 
     if positions is not None:
-        positions_init = positions
+        positions_init = positions  # TODO: Implement single position
     else:
         # Initialize to coordinate origin
-        positions_init = np.zeros((k, 3))
+        positions_init = np.zeros((k, 3))  # We initialize to the size of orienatons, even for single position
         # perch_mean = np.mean(landmarks[:2], axis=0)
         # for p in positions_init:
         #     p[:] = perch_mean
@@ -300,6 +306,9 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
     for lm_idx, lm in enumerate(landmarks_init):
         if np.any(np.isnan(lm)):
             lm[:] = intersect(positions_init, landmark_vectors[:, lm_idx])
+
+    if opts["single_position"]:
+        positions_init = positions_init[(0,),]
 
     vars_full[:] = np.hstack((
         landmarks_init.ravel(),
@@ -389,14 +398,23 @@ def unravel_vars(free_vars, args):
     else:
         raise Exception("Either landmark_vecs or landmark_imcoords must not be None")
 
+    if args["single_position"]:
+        k_p = 1
+    else:
+        k_p = k
+
     edges = np.array([0,
                       n * 3,
-                      n * 3 + k * 3,
-                      n * 3 + k * 3 + k * 3
+                      n * 3 + k_p * 3,
+                      n * 3 + k_p * 3 + k * 3
                       ])
 
     landmarks = vars_full[edges[0]:edges[1]].reshape(n, 3)
     positions = vars_full[edges[1]:edges[2]].reshape(k, 3)
+
+    if args["single_position"]:
+        positions = np.repeat(positions, k, axis=0)
+
     oris_flu = vars_full[edges[2]:edges[3]].reshape(k, 3)
     return landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts
 
