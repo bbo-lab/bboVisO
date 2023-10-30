@@ -84,7 +84,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                          opts_optim, opts,
                                          landmarks_init=landmarks_opt[landmarks_mask],
                                          positions_init=positions_opt,
-                                         oris_flu_opt_init=oris_flu_opt,
+                                         oris_flu_init=oris_flu_opt,
                                          optimize=[["positions", "oris"]],
                                          landmarks_optimize=landmarks_optimize[landmarks_mask]
                                          )
@@ -98,7 +98,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                          opts_optim, opts,
                                          landmarks_init=landmarks_opt[landmarks_mask],
                                          positions_init=positions_opt,
-                                         oris_flu_opt_init=oris_flu_opt,
+                                         oris_flu_init=oris_flu_opt,
                                          optimize=[["positions", "oris"]],
                                          landmarks_optimize=landmarks_optimize[landmarks_mask]
                                          )
@@ -111,7 +111,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                      opts_optim, opts,
                                      landmarks_init=landmarks_opt[landmarks_mask],
                                      positions_init=positions_opt,
-                                     oris_flu_opt_init=oris_flu_opt,
+                                     oris_flu_init=oris_flu_opt,
                                      optimize=[["positions", "oris"], ["positions", "oris", "landmarks"]],
                                      landmarks_optimize=landmarks_optimize[landmarks_mask]
                                      )

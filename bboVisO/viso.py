@@ -16,7 +16,7 @@ precalc = None
 
 
 def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
-                            landmarks_init=None, positions_init=None, oris_flu_opt_init=None,
+                            landmarks_init=None, positions_init=None, oris_flu_init=None,
                             optimize=None, landmarks_optimize=None):
     # Previous positions for alternating update
     positions_prev = np.full((landmark_imcoords.shape[1], 3), np.nan)
@@ -37,7 +37,7 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
         # Run optimization
         print(f"Optimizing {opt}")
         vars_free, objfun_args, optim_args = make_optim_input(calibs, opts,
-                                                              landmarks_init, positions_init, oris_flu_opt_init,
+                                                              landmarks_init, positions_init, oris_flu_init,
                                                               optimize=opt, landmarks_optimize=landmarks_optimize,
                                                               precalc=precalc,
                                                               landmark_imcoords=landmark_imcoords,
@@ -50,23 +50,23 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
                                                    **opts_optim
                                                    )
 
-        landmarks_init, positions_init, oris_flu_opt_init = unravel_vars(min_result.x, objfun_args)[:3]
+        landmarks_init, positions_init, oris_flu_init = unravel_vars(min_result.x, objfun_args)[:3]
         max_pos_shift = np.max(np.abs(positions_prev - positions_init))
         positions_prev = positions_init
 
         print(f"Max pos shift {max_pos_shift}")
 
         if opts["interpolate_high_error"]:
-            positions_init, oris_flu_opt_init = interpolate_high_error(positions_init, oris_flu_opt_init, calibs, opts,
-                                                                       landmarks=landmarks_init,
-                                                                       optimize=["positions", "oris"],
-                                                                       landmark_vecs=landmark_vecs,
-                                                                       landmark_imcoords=landmark_imcoords,
-                                                                       landmarks_optimize=landmarks_optimize)
+            positions_init, oris_flu_init = interpolate_high_error(positions_init, oris_flu_init, calibs, opts,
+                                                                   landmarks=landmarks_init,
+                                                                   optimize=["positions", "oris"],
+                                                                   landmark_vecs=landmark_vecs,
+                                                                   landmark_imcoords=landmark_imcoords,
+                                                                   landmarks_optimize=landmarks_optimize)
 
     print(f"Optimization took {time.time() - t} s")
 
-    return landmarks_init, positions_init, oris_flu_opt_init
+    return landmarks_init, positions_init, oris_flu_init
 
 
 def align_results_by_landmarks(landmarks_real, landmarks, positions, oris_flu):
@@ -222,9 +222,13 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
         'precalc': get_precalc() if precalc is None else precalc
     }
 
+    if not opts["single_position"]:
+        jac_sparsity = make_jacobian_sparsity_mask(k, n, mask_free_input)
+    else:
+        jac_sparsity = None  # TODO: implement
     optim_args = {
         'bounds': np.array([[-np.inf, np.inf]] * vars_free.size).T,
-        'jac_sparsity': make_jacobian_sparsity_mask(k, n, mask_free_input)
+        'jac_sparsity': jac_sparsity
     }
 
     return vars_free, obfun_args, optim_args
@@ -321,6 +325,8 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
     positions_free = np.ones_like(positions_init, dtype=bool)
     oris_flu_free = np.ones_like(oris_flu_init, dtype=bool)
 
+    assert not opts["single_position"] or "landmarks" not in optimize, \
+        "Landmarks cannot be optimized from single position"
     if "landmarks" not in optimize:
         assert landmarks is not None, "Landmarks need to be provided if they are not optimized"
         landmarks_free[:] = False
@@ -410,7 +416,7 @@ def unravel_vars(free_vars, args):
                       ])
 
     landmarks = vars_full[edges[0]:edges[1]].reshape(n, 3)
-    positions = vars_full[edges[1]:edges[2]].reshape(k, 3)
+    positions = vars_full[edges[1]:edges[2]].reshape(k_p, 3)
 
     if args["single_position"]:
         positions = np.repeat(positions, k, axis=0)

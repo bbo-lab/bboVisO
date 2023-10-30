@@ -19,7 +19,7 @@ def get_labeled_frames(labels):
 
 
 def get_labels(labels):
-    return list(labels.keys())
+    return [lm for lm in labels if len(labels[lm].keys()) > 0]
 
 
 def get_labels_from_frame(labels, frame_idx):
@@ -32,9 +32,17 @@ def get_labels_from_frame(labels, frame_idx):
     return frame_labels
 
 
+def get_n_cams(labels):
+    for lm in labels:      
+        for fr_idx in labels[lm]:
+            return len(labels[lm][fr_idx])
+    print("Did not find any frame labels")
+    return None
+
+
 def to_array(landmark_labels, detected_frames, detected_labels,
              time_bases, landmarks_identity=None):
-    cams_n = len(next(iter(next(iter(landmark_labels.values())).values())))
+    cams_n = get_n_cams(landmark_labels)
 
     time_base = np.unique(np.concatenate(time_bases, axis=0))
 

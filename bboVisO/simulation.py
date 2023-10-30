@@ -280,7 +280,7 @@ def run_simulated_data(opts, pertubation_deg=0.4, landmark_radius=50):
                                                                               opts_optim, opts,
                                                                               landmarks_init=landmarks,
                                                                               positions_init=positions,
-                                                                              oris_flu_opt_init=oris_flu.as_rotvec(),
+                                                                              oris_flu_init=oris_flu.as_rotvec(),
                                                                               )
     # Error output
     print_errors(landmarks, positions, oris_flu, landmarks_opt, positions_opt, oris_flu_opt)

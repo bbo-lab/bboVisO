@@ -3,7 +3,6 @@ import numpy as np
 import os.path
 import argparse
 from pathlib import Path
-import sys
 
 import yaml
 
@@ -12,6 +11,7 @@ from svidreader import SVidReader
 
 import bboVisO.opts
 import bboVisO.viso as viso
+from bboVisO.helper import get_cam_time_bases
 from bboVisO.output import save_to_text
 from bboVisO.visualisation import plot_frames
 
@@ -21,13 +21,14 @@ jax.config.update("jax_enable_x64", True)
 
 def main():
     print("Starting")
-    time_factor = int(1e6)  # us
     #
     # global opts, path
     # Some debug output
     parser = argparse.ArgumentParser(description="")
     parser.add_argument('--nodebug', required=False, default=False, action="store_true",
                         help="Decrease debug output")
+    parser.add_argument('--check_gui', required=False, default=False, action="store_true",
+                        help="Opens checker window")
     parser.add_argument('--from_yml', type=str, required=False, nargs=1,
                         help="Input configuration")
     parser.add_argument('--tetherless', required=False, default=False, action="store_true",
@@ -57,81 +58,71 @@ def main():
         opts["check_mode"] = True
     opts["img_out_n"] = args.img_out_n[0]
 
-    add_offset = args.add_offset[0]
+    if args.text_out:
+        opts["text_out"] = args.text_out[0]
+    else:
+        opts["text_out"] = False
 
     if args.from_yml:
         yml_path = Path(args.from_yml[0]).expanduser().resolve()
 
         if args.tetherless:
-            import tetherless_data
-            data = tetherless_data.load(yml_path)
+            from bboVisO import tetherless_data
+            data, opts = tetherless_data.load(yml_path, opts)
         else:
             with open(yml_path, 'r') as file:
                 data = yaml.safe_load(file)
 
-        calibration = data["calibration"]
-        acm_labels = data["acm_labels"]
-        landmark_coordinates = data["landmark_coordinates"]
-        if "videos" in data:
-            videos = data["videos"]
+        opts["add_offset"] = np.zeros((len(data["cam_offsets"])))
+        opts["add_offset"][1] = args.add_offset[0]
+
+        if args.check_gui:
+            from bboVisO.gui import checker
+            checker.main(data, opts)
         else:
-            videos = None
+            calibration = data["calibration"]
+            acm_labels = data["acm_labels"]
+            landmark_coordinates = data["landmark_coordinates"]
+            if "videos" in data:
+                videos = data["videos"]
+            else:
+                videos = None
 
-        if "time_range" in data:
-            opts["time_range"] = data["time_range"]*time_factor  # np.array([789000000, 791000000])+100/60*time_factor
+            if "time_range" in data:
+                opts["time_range"] = data["time_range"]
 
-        landmark_labels = acm_load(acm_labels)["labels"]
-        landmark_frames = get_labeled_frames(landmark_labels).astype(int)
-        print(len(landmark_frames))
+            landmark_labels = acm_load(acm_labels)["labels"]
+            landmark_frames = get_labeled_frames(landmark_labels).astype(int)
+            cam_time_bases = get_cam_time_bases(landmark_frames, data["cam_fps"], data["cam_offsets"], opts)
 
-        offsets = (np.array(data["cam_offsets"]) * time_factor).astype(np.uint64)
-        offsets[1] += add_offset * time_factor
-        fpss = data["cam_fps"]
+            from bboVisO.process import run  # noqa: E402
+            calibs = np.load(calibration, allow_pickle=True)[()]["calibs"]
 
-        cam_time_bases = [
-            (landmark_frames.astype(float) * float(time_factor)/float(fps)).astype(np.uint64) + offset
-            for fps, offset in zip(fpss, offsets)
-        ]
+            landmarks, positions, oris, res_time_base, landmark_imcoords, error_repro, landmark_labels = \
+                run(
+                    landmark_labels=landmark_labels,
+                    landmark_coordinates=landmark_coordinates,
+                    calibs=calibs,
+                    time_bases=cam_time_bases,
+                    opts=opts)
 
-        # Adjust time that are just off by 1us from float rounding, to not create an additional measurement
-        for i_cam in range(1, len(cam_time_bases)):
-            for i_t, t in enumerate(cam_time_bases[i_cam]):
-                mask = np.abs(cam_time_bases[0]-t) == 1
-                s_mask = np.sum(mask)
-                assert s_mask < 2, "A time seems to appear multiple times in the time base."
-                if s_mask==0:
-                    continue
-                else:
-                    # print(f"Rplacing {cam_time_bases[i_cam][i_t]} with {cam_time_bases[0][mask][0]}")
-                    cam_time_bases[i_cam][i_t] = cam_time_bases[0][mask]
+            if args.text_out:
+                path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
+                os.makedirs(path, exist_ok=True)
+                save_to_text(data["name"], path.as_posix(), res_time_base,
+                             landmarks, positions, oris, error_repro, landmark_labels)
 
-        from bboVisO.process import run  # noqa: E402
-        calibs = np.load(calibration, allow_pickle=True)[()]["calibs"]
+            if args.img_out and videos is not None:
+                path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
+                readers = [SVidReader(vid) for vid in videos]
 
-        landmarks, positions, oris, res_time_base, landmark_imcoords, error_repro, landmark_labels = \
-            run(
-                landmark_labels=landmark_labels,
-                landmark_coordinates=landmark_coordinates,
-                calibs=calibs,
-                time_bases=cam_time_bases,
-                opts=opts)
+                assert len(readers) == len(landmark_imcoords), "Number of readers must match first dm of landmark_imcoords"
 
-        if args.text_out:
-            path = Path(os.path.join(args.text_out[0], yml_path.stem)).expanduser().resolve().as_posix()
-            os.makedirs(path, exist_ok=True)
-            save_to_text(yml_path.stem, path, res_time_base, landmarks, positions, oris, error_repro, landmark_labels)
-
-        if args.img_out and videos is not None:
-            path = Path(os.path.join(args.img_out[0], yml_path.stem)).expanduser().resolve().as_posix()
-            readers = [SVidReader(vid) for vid in videos]
-
-            assert len(readers) == len(landmark_imcoords), "Number of readers must match first dm of landmark_imcoords"
-
-            plot_frames(calibs,
-                        res_time_base, oris, path, positions, landmark_imcoords, error_repro,
-                        landmarks, landmark_frames,
-                        cam_time_bases, readers,
-                        yml_path, opts)
+                plot_frames(calibs,
+                            res_time_base, oris, path.as_posix(), positions, landmark_imcoords, error_repro,
+                            landmarks, landmark_frames,
+                            cam_time_bases, readers,
+                            yml_path, opts)
     elif args.simulation:
         from bboVisO.simulation import run_simulated_data  # noqa: E402
 

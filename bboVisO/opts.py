@@ -12,6 +12,7 @@ def get_opts():
             'tr_solver': 'lsmr',  # 'lsmr' is forced since jac_sparsity is also passed to least_squares function
             'max_nfev': 500,
             'verbose': 2,
+            'jac': '2-point',
         },
         'far_first': False,  # Optimize on only far landmarks first
         'close_first': False,  # Optimize on only close landmarks first
@@ -22,4 +23,6 @@ def get_opts():
         'time_range': [0, 3600*24*365],
         'min_labels': 4,  # Require min_labels detected per frame
         'single_position': False,  # object stays in one position, only estimate single position + rotations
+        'time_dtype': float,
+        'add_offset': [],
     }
