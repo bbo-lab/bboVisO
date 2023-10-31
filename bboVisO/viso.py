@@ -29,7 +29,7 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
     t = time.time()
     precalc = get_precalc()
     landmark_vecs = landmark_vecs_from_imcoords(landmark_imcoords, calibs)
-    for opt in optimize:
+    for i_iter, opt in enumerate(optimize):
         # If we are doing a full optimization, increase to full step count steps
         if isinstance(opt, list):
             opts_optim["max_nfev"] = opts["optimization"]["max_nfev"]
@@ -56,7 +56,7 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
 
         print(f"Max pos shift {max_pos_shift}")
 
-        if opts["interpolate_high_error"]:
+        if opts["interpolate_high_error"] and (opts["check_mode"] or i_iter < len(optimize)-1):
             positions_init, oris_flu_init = interpolate_high_error(positions_init, oris_flu_init, calibs, opts,
                                                                    landmarks=landmarks_init,
                                                                    optimize=["positions", "oris"],
