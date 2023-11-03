@@ -26,6 +26,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
 
     # Marked labels
     detected_labels = sorted(acm_labels.get_labels(landmark_labels))
+    detected_labels = [d for d in detected_labels if d in labels]
 
     # All marked labels must correspond to a landmark, coordinates may be empty or nan
     assert set(detected_labels).issubset(labels), "Some detected labels are unknown"
@@ -80,7 +81,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     if opts["far_first"]:
         landmarks_mask = landmarks_use & landmarks_far
         landmarks_opt_far, positions_opt, oris_flu_opt = \
-            viso.infer_position_attitude(landmark_imcoords[:, :, landmarks_mask], calibs,
+            viso.infer_position_attitude(time_base, landmark_imcoords[:, :, landmarks_mask], calibs,
                                          opts_optim, opts,
                                          landmarks_init=landmarks_opt[landmarks_mask],
                                          positions_init=positions_opt,
@@ -94,7 +95,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     if opts["close_first"]:
         landmarks_mask = landmarks_use & ~landmarks_far
         landmarks_opt_mask, positions_opt, oris_flu_opt = \
-            viso.infer_position_attitude(landmark_imcoords[:, :, landmarks_mask], calibs,
+            viso.infer_position_attitude(time_base, landmark_imcoords[:, :, landmarks_mask], calibs,
                                          opts_optim, opts,
                                          landmarks_init=landmarks_opt[landmarks_mask],
                                          positions_init=positions_opt,
@@ -107,7 +108,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     # Optimize p&o, then p&o&l for all used landmarks
     landmarks_mask = landmarks_use
     landmarks_opt_mask, positions_opt, oris_flu_opt = \
-        viso.infer_position_attitude(landmark_imcoords[:, :, landmarks_mask], calibs,
+        viso.infer_position_attitude(time_base, landmark_imcoords[:, :, landmarks_mask], calibs,
                                      opts_optim, opts,
                                      landmarks_init=landmarks_opt[landmarks_mask],
                                      positions_init=positions_opt,
@@ -118,7 +119,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
 
     # if opts["check_mode"]:
-    #     positions_opt, oris_flu_opt = viso.interpolate_high_error(positions_opt, oris_flu_opt, calibs, opts,
+    #     positions_opt, oris_flu_opt = viso.interpolate_high_error(time_base, positions_opt, oris_flu_opt, calibs, opts,
     #                                                               landmarks=landmarks_opt[landmarks_mask],
     #                                                               optimize=["positions", "oris"],
     #                                                               landmark_imcoords=landmark_imcoords[:, :,

@@ -18,8 +18,6 @@ def get_opts():
         'close_first': False,  # Optimize on only close landmarks first
         'interpolate_high_error': True,  # After a first optimization run, interpolate position and orientation of
                                          #  high error frames as initialization for next opimization
-        'check_mode': False,  # as interpolate_high_error, but after last opimization. This often makes finding label
-                              #  errors much easier
         'time_range': [0, 3600*24*365],
         'min_labels': 4,  # Require min_labels detected per frame
         'single_position': False,  # object stays in one position, only estimate single position + rotations

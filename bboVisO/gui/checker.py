@@ -48,13 +48,17 @@ class bboVisOchecker(QMainWindow):
 
         path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
 
-        cam_positions_pd = pd.read_csv(path / f"{data['name']}_cam_positions.csv",
-                                       sep="\t")
+        viso_maxerrors_pd = pd.read_csv(path / f"{data['name']}_maxerror.csv", sep="\t", header=None)
+        viso_maxerrors_pd = viso_maxerrors_pd.sort_values(viso_maxerrors_pd.columns[0], ascending=True)
+        self.viso_maxerrors = np.array(viso_maxerrors_pd[1]).T
+
+        viso_positions_pd = pd.read_csv(path / f"{data['name']}_cam_positions.csv", sep="\t")
         self.viso_positions = np.array([
-            cam_positions_pd["x0"],
-            cam_positions_pd["y0"],
-            cam_positions_pd["z0"],
+            viso_positions_pd["x0"],
+            viso_positions_pd["y0"],
+            viso_positions_pd["z0"],
         ]).T
+
         viso_orientations_pd = pd.read_csv(path / f"{data['name']}_cam_orientations.csv", sep="\t")
         viso_orientations_q = np.array([
             viso_orientations_pd["x0"],
@@ -63,7 +67,18 @@ class bboVisOchecker(QMainWindow):
             viso_orientations_pd["w0"],
         ]).T
         self.viso_orientations = R.from_quat(viso_orientations_q)
-        self.viso_times = np.array(cam_positions_pd["t_us"])
+        self.viso_times = np.array(viso_positions_pd["t_us"])
+
+        self.interp_error_thres = 500
+        self.check_mode = False
+
+        low_error_mask = self.viso_maxerrors < self.interp_error_thres
+        self.viso_positions_interp, self.viso_orientations_interp = helper.interpolate_mask(
+            self.viso_times,
+            self.viso_positions,
+            self.viso_orientations,
+            low_error_mask
+        )
 
         label_data = acm_labels.load(data["acm_labels"])["labels"]
         self.landmark_frames = acm_labels.get_labeled_frames(label_data).astype(int)
@@ -74,6 +89,9 @@ class bboVisOchecker(QMainWindow):
 
         landmark_data = data["landmark_coordinates"]
         origin = np.array(landmark_data["origin"]["position"])
+        labels = sorted(list(landmark_data["landmarks"].keys()))
+        self.landmark_labels = [d for d in self.landmark_labels if d in labels]
+
         self.landmark_coords3d, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_use = helper.landmarks_to_array(
             landmark_data, self.landmark_labels)
         self.landmark_coords3d -= origin
@@ -99,7 +117,7 @@ class bboVisOchecker(QMainWindow):
         time = self.times[self.time_idx]
 
         # Set cam for time point
-        self.set_cam_idx(self.cam_idx, update_frame=False)
+        self.set_cam_idx(self.cam_idx, update_time=False)
 
         # Set camera frame for time point
         self.cam_frame_idx = np.where(self.cam_time_bases[self.cam_idx] == self.times[self.time_idx])[0][0]
@@ -129,23 +147,24 @@ class bboVisOchecker(QMainWindow):
         time_idx = np.argmin(np.abs(self.times - time))
         self.set_time_idx(time_idx, update_frame)
 
-    def set_cam_idx(self, idx, update_frame=True):
-        self.cam_idx = idx
-
+    def set_cam_idx(self, idx, update_time=True):
         time = self.times[self.time_idx]
         # Set cam for time point
         cam_mask = np.array([np.isin(time, ctb) for ctb in self.cam_time_bases])
         avail_cam_idxs = np.where(cam_mask)[0]
-        if self.cam_idx not in avail_cam_idxs:
+        if idx in avail_cam_idxs:
+            self.cam_idx = idx
+        else:
             self.cam_idx = avail_cam_idxs[0]
+
         self.components["controls"]["dropdown_cams"].blockSignals(True)
         self.components["controls"]["dropdown_cams"].clear()
         self.components["controls"]["dropdown_cams"].addItems([str(i) for i in avail_cam_idxs])
         self.components["controls"]["dropdown_cams"].setCurrentIndex(np.where(avail_cam_idxs == self.cam_idx)[0][0])
         self.components["controls"]["dropdown_cams"].blockSignals(False)
 
-        if update_frame:
-            self.update_frame()
+        if update_time:
+            self.set_time_idx(self.time_idx)
 
     def open_readers(self):
         print("Opening readers ... ", end="")
@@ -158,15 +177,14 @@ class bboVisOchecker(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         vlayout = QVBoxLayout(central_widget)
-
         # Matplotlib canvas
         self.components["main"]["figure"] = Figure()
         self.components["main"]["canvas"] = FigureCanvas(self.components["main"]["figure"])
-        vlayout.addWidget(self.components["main"]["canvas"])
 
         ax = self.components["main"]["figure"].add_subplot(111)
         self.components["main"]["axis"] = ax
         self.components["main"]["figure"].subplots_adjust(left=0, right=1, top=1, bottom=0)
+        vlayout.addWidget(self.components["main"]["canvas"])
 
         time_layout = QHBoxLayout()
         # Slider
@@ -178,6 +196,7 @@ class bboVisOchecker(QMainWindow):
 
         self.components["controls"]["button_t_prev"] = QPushButton("<")
         self.components["controls"]["button_t_prev"].setFixedWidth(20)
+        self.components["controls"]["button_t_prev"].setFixedHeight(30)
         time_layout.addWidget(self.components["controls"]["button_t_prev"])
         self.components["controls"]["button_t_next"] = QPushButton(">")
         self.components["controls"]["button_t_next"].setFixedWidth(20)
@@ -211,6 +230,14 @@ class bboVisOchecker(QMainWindow):
         cam_layout.addWidget(self.components["controls"]["edit_fr"])
         vlayout.addLayout(cam_layout)
 
+        check_layout = QHBoxLayout()
+        self.components["controls"]["button_check"] = QPushButton('Check mode', self)
+        self.components["controls"]["button_check"].setFixedWidth(80)
+        self.components["controls"]["button_check"].setCheckable(True)
+        check_layout.addWidget(self.components["controls"]["button_check"])
+
+        vlayout.addLayout(check_layout)
+
         # Connecting slider and text input
         self.components["controls"]["slider_t"].sliderReleased.connect(self.on_slider_t_released)
         self.components["controls"]["edit_t"].returnPressed.connect(self.on_edit_t_change)
@@ -220,6 +247,11 @@ class bboVisOchecker(QMainWindow):
         self.components["controls"]["button_fr_next"].clicked.connect(self.on_button_fr_next_change)
         self.components["controls"]["button_t_prev"].clicked.connect(self.on_button_t_prev_change)
         self.components["controls"]["button_t_next"].clicked.connect(self.on_button_t_next_change)
+        self.components["controls"]["button_check"].clicked.connect(self.on_button_check_toggle)
+
+    def on_button_check_toggle(self):
+        self.check_mode = self.components["controls"]["button_check"].isChecked()
+        self.update_frame()
 
     def on_button_fr_prev_change(self):
         self.set_cam_frame_idx(np.max((0, self.cam_frame_idx - 1)))
@@ -248,7 +280,6 @@ class bboVisOchecker(QMainWindow):
         img = self.readers[self.cam_idx].get_data(self.landmark_frames[self.cam_frame_idx])
         imcoords = self.landmark_imcoords[self.cam_idx, self.time_idx]
 
-        print("===== ", self.cam_idx, " == ", self.landmark_frames[self.cam_frame_idx], " =====")
         for i, ic in enumerate(imcoords):
             if not np.any(np.isnan(ic)):
                 print(f"{self.landmark_labels[i]}\t{ic[0]}\t{ic[1]}")
@@ -259,11 +290,21 @@ class bboVisOchecker(QMainWindow):
         ax.plot(*imcoords.T, 'b+')
 
         viso_idx = np.where(self.viso_times == self.times[self.time_idx])[0]
+        print("===== ", self.cam_idx, " == ", self.landmark_frames[self.cam_frame_idx], " =====")
+        print("===== ", self.times[self.time_idx], " == ", viso_idx, " =====")
         if len(viso_idx > 0):
             viso_idx = viso_idx[0]
 
-            pos = self.viso_positions[viso_idx]
-            ori_flu = self.viso_orientations[viso_idx]
+            if not self.check_mode:
+                pos = self.viso_positions[viso_idx]
+                ori_flu = self.viso_orientations[viso_idx]
+            else:
+                pos = self.viso_positions_interp[viso_idx]
+                ori_flu = self.viso_orientations_interp[viso_idx]
+
+            print("Max error:", self.viso_maxerrors[viso_idx])
+            print("Pos:", pos)
+            print("Ori:", ori_flu.as_quat())
 
             dirs = ori_flu.inv().apply(self.landmark_coords3d - pos)
 
@@ -273,6 +314,8 @@ class bboVisOchecker(QMainWindow):
             ax.plot(*imcoords_proj.T, 'bx')
             for ic, ic_p in zip(imcoords, imcoords_proj):
                 ax.plot(*np.vstack((ic, ic_p)).T, "r--", zorder=0)
+        else:
+            print(self.times[self.time_idx], "not in viso")
 
         ax.set_xlim((0, img.shape[1]))
         ax.set_ylim((0, img.shape[0]))

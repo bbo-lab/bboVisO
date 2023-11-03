@@ -10,12 +10,13 @@ from scipy.interpolate import make_interp_spline, interp1d
 from calibcamlib.camerasystem import Camerasystem
 from bboVisO.geometry import align_positions_orientations, build_vector_bundle, align_rotation_vectors
 from calibcamlib.helper import intersect
+from bboVisO.helper import interpolate_mask
 
 debug = False
 precalc = None
 
 
-def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
+def infer_position_attitude(times, landmark_imcoords, calibs, opts_optim, opts,
                             landmarks_init=None, positions_init=None, oris_flu_init=None,
                             optimize=None, landmarks_optimize=None):
     # Previous positions for alternating update
@@ -33,6 +34,18 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
         # If we are doing a full optimization, increase to full step count steps
         if isinstance(opt, list):
             opts_optim["max_nfev"] = opts["optimization"]["max_nfev"]
+
+        if opts["interpolate_high_error"] and i_iter > 0:
+            print(f"Interpolating high errors")
+            # This might help to get the system out of local minima in case of wrong markings.
+            # The last step is always an optimization, though. The check_gui also implements this
+            # interpolation such that it can be used for checking errors.
+            positions_init, oris_flu_init = interpolate_high_error(times, positions_init, oris_flu_init, calibs, opts,
+                                                                   landmarks=landmarks_init,
+                                                                   optimize=["positions", "oris"],
+                                                                   landmark_vecs=landmark_vecs,
+                                                                   landmark_imcoords=landmark_imcoords,
+                                                                   landmarks_optimize=landmarks_optimize)
 
         # Run optimization
         print(f"Optimizing {opt}")
@@ -55,14 +68,6 @@ def infer_position_attitude(landmark_imcoords, calibs, opts_optim, opts,
         positions_prev = positions_init
 
         print(f"Max pos shift {max_pos_shift}")
-
-        if opts["interpolate_high_error"] and (opts["check_mode"] or i_iter < len(optimize)-1):
-            positions_init, oris_flu_init = interpolate_high_error(positions_init, oris_flu_init, calibs, opts,
-                                                                   landmarks=landmarks_init,
-                                                                   optimize=["positions", "oris"],
-                                                                   landmark_vecs=landmark_vecs,
-                                                                   landmark_imcoords=landmark_imcoords,
-                                                                   landmarks_optimize=landmarks_optimize)
 
     print(f"Optimization took {time.time() - t} s")
 
@@ -200,7 +205,6 @@ def objfun_repro_jacobian_wrapper(free_vars, args):
 def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None,
                      optimize=None, landmarks_optimize=None,
                      precalc=None, landmark_imcoords=None, landmark_vecs=None):
-
     if landmark_vecs is None and landmark_imcoords is not None:
         landmark_vecs = landmark_vecs_from_imcoords(landmark_imcoords, calibs)
 
@@ -462,7 +466,8 @@ def make_jacobian_sparsity_mask(k, n, mask_free_input):
     return jac_sparsity[:, mask_free_input]
 
 
-def interpolate_high_error(positions_opt, oris_flu_opt, calibs, opts, landmarks, optimize, landmark_imcoords=None,
+def interpolate_high_error(times, positions_opt, oris_flu_opt, calibs, opts, landmarks, optimize,
+                           landmark_imcoords=None,
                            landmark_vecs=None, landmarks_optimize=None):
     vars_free, objfun_args, optim_args = make_optim_input(calibs, opts,
                                                           landmarks, positions_opt, oris_flu_opt,
@@ -473,40 +478,8 @@ def interpolate_high_error(positions_opt, oris_flu_opt, calibs, opts, landmarks,
     repro_error = objfun_repro_wrapper(vars_free, objfun_args, no_ravel=True)
     frame_max_errors = np.nanmax(np.nansum(repro_error ** 2, axis=-1), axis=-1)
 
-    frames = np.array(list(range(len(frame_max_errors))))
-
     low_error_mask = frame_max_errors < 5000
 
-    oris_flu_opt = align_rotation_vectors(oris_flu_opt, low_error_mask)
+    pos_interp, ori_interp = interpolate_mask(times, positions_opt, R.from_rotvec(oris_flu_opt), low_error_mask)
 
-    interp_x = make_interp_spline(frames[low_error_mask], positions_opt[low_error_mask, 0])
-    interp_y = make_interp_spline(frames[low_error_mask], positions_opt[low_error_mask, 1])
-    interp_z = make_interp_spline(frames[low_error_mask], positions_opt[low_error_mask, 2])
-
-    interp_rx = interp1d(frames[low_error_mask], oris_flu_opt[low_error_mask, 0], fill_value='extrapolate')
-    interp_ry = interp1d(frames[low_error_mask], oris_flu_opt[low_error_mask, 1], fill_value='extrapolate')
-    interp_rz = interp1d(frames[low_error_mask], oris_flu_opt[low_error_mask, 2], fill_value='extrapolate')
-
-    positions_opt[~low_error_mask, 0] = interp_x(frames[~low_error_mask])
-    positions_opt[~low_error_mask, 1] = interp_y(frames[~low_error_mask])
-    positions_opt[~low_error_mask, 2] = interp_z(frames[~low_error_mask])
-
-    oris_flu_opt[~low_error_mask, 0] = interp_rx(frames[~low_error_mask])
-    oris_flu_opt[~low_error_mask, 1] = interp_ry(frames[~low_error_mask])
-    oris_flu_opt[~low_error_mask, 2] = interp_rz(frames[~low_error_mask])
-
-    # for i_fr, err in enumerate(frame_max_errors):
-    #     if i_fr == 0 or i_fr == len(frame_max_errors)-1:
-    #         continue
-    #     if err > 10000:
-    #         if frame_max_errors[i_fr-1]<10000 and frame_max_errors[i_fr+1]<10000:
-    #             positions_opt[i_fr] = np.mean((positions_opt[i_fr-1], positions_opt[i_fr+1]), axis=0)
-    #             oris_flu_opt[i_fr] = np.mean((oris_flu_opt[i_fr - 1], oris_flu_opt[i_fr + 1]), axis=0)
-    #         elif frame_max_errors[i_fr-1]<10000:
-    #             positions_opt[i_fr] = positions_opt[i_fr - 1]
-    #             oris_flu_opt[i_fr] = oris_flu_opt[i_fr - 1]
-    #         elif frame_max_errors[i_fr+1]<10000:
-    #             positions_opt[i_fr] = positions_opt[i_fr + 1]
-    #             oris_flu_opt[i_fr] = oris_flu_opt[i_fr + 1]
-
-    return positions_opt, oris_flu_opt
+    return pos_interp, ori_interp.as_rotvec()

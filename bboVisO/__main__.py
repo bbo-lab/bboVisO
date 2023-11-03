@@ -39,8 +39,8 @@ def main():
                         help="Folder for image output")
     parser.add_argument('--img_out_n', type=int, required=False, nargs=1, default=[0],
                         help="Number of images to generate starting from highest maxerror")
-    parser.add_argument('--check_mode', required=False, default=False, action="store_true",
-                        help="Interpolate high error frames after last optimization")
+    parser.add_argument('--time_range', type=float, required=False, nargs=2, default=[-1, -1],
+                        help="Number of images to generate starting from highest maxerror")
     parser.add_argument('--add_offset', type=float, required=False, nargs=1, default=[0.0],
                         help="Offset to add to second cam, for subframe resolution tests")
     parser.add_argument('--simulation', required=False, default=False, action="store_true",
@@ -54,8 +54,6 @@ def main():
         viso.debug = True
     opts = bboVisO.opts.get_opts()
 
-    if args.check_mode:
-        opts["check_mode"] = True
     opts["img_out_n"] = args.img_out_n[0]
 
     if args.text_out:
@@ -88,7 +86,9 @@ def main():
             else:
                 videos = None
 
-            if "time_range" in data:
+            if not args.time_range[0] == -1:
+                opts["time_range"] = np.array(args.time_range)
+            elif "time_range" in data:
                 opts["time_range"] = data["time_range"]
 
             landmark_labels = acm_load(acm_labels)["labels"]
