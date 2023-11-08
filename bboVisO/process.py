@@ -2,10 +2,11 @@ import jax.config
 import numpy as np
 
 import bboVisO.viso as viso
-import bboVisO.acm_labels as acm_labels
 from calibcamlib import Camerasystem
 
 from bboVisO.helper import landmarks_to_array
+
+from bbo import label_lib
 
 # single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!
 jax.config.update("jax_enable_x64", True)
@@ -21,11 +22,11 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     origin = np.array(landmark_coordinates["origin"]["position"])
 
     # Frames with labels
-    detected_frames = acm_labels.get_labeled_frames(landmark_labels)
+    detected_frames = label_lib.get_labeled_frame_idxs(landmark_labels)
     print(len(detected_frames))
 
     # Marked labels
-    detected_labels = sorted(acm_labels.get_labels(landmark_labels))
+    detected_labels = sorted(label_lib.get_labels(landmark_labels))
     detected_labels = [d for d in detected_labels if d in labels]
 
     # All marked labels must correspond to a landmark, coordinates may be empty or nan
@@ -35,9 +36,9 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
         landmark_coordinates, detected_labels)
     landmarks_all -= origin
 
-    landmark_imcoords, time_base = acm_labels.to_array(landmark_labels, detected_frames, detected_labels,
+    landmark_imcoords, time_base = label_lib.to_array(landmark_labels, detected_frames, detected_labels,
                                                             time_bases=time_bases,
-                                                            landmarks_identity=landmarks_identity)
+                                                            label_identity=landmarks_identity)
 
 
     # Cut down to range actually filled with data

@@ -3,11 +3,13 @@ import numpy as np
 import os.path
 import argparse
 from pathlib import Path
+import importlib
 
 import yaml
 
-from bboVisO.acm_labels import load as acm_load, get_labeled_frames
 from svidreader import SVidReader
+
+from bbo import label_lib
 
 import bboVisO.opts
 import bboVisO.viso as viso
@@ -31,8 +33,8 @@ def main():
                         help="Opens checker window")
     parser.add_argument('--from_yml', type=str, required=False, nargs=1,
                         help="Input configuration")
-    parser.add_argument('--tetherless', required=False, default=False, action="store_true",
-                        help="The YML file is in tetherless format")
+    parser.add_argument('--importer', required=False, default="default", type=str,
+                        help="Importer to use")
     parser.add_argument('--text_out', type=str, required=True, nargs=1,
                         help="Folder for text output")
     parser.add_argument('--img_out', type=str, required=False, nargs=1,
@@ -64,12 +66,8 @@ def main():
     if args.from_yml:
         yml_path = Path(args.from_yml[0]).expanduser().resolve()
 
-        if args.tetherless:
-            from bboVisO import tetherless_data
-            data, opts = tetherless_data.load(yml_path, opts)
-        else:
-            with open(yml_path, 'r') as file:
-                data = yaml.safe_load(file)
+        importer = importlib.import_module("bboVisO.importer."+args.importer)
+        data, opts = importer.load(yml_path, opts)
 
         opts["add_offset"] = np.zeros((len(data["cam_offsets"])))
         opts["add_offset"][1] = args.add_offset[0]
@@ -79,7 +77,7 @@ def main():
             checker.main(data, opts)
         else:
             calibration = data["calibration"]
-            acm_labels = data["acm_labels"]
+            label_data = data["labels"]
             landmark_coordinates = data["landmark_coordinates"]
             if "videos" in data:
                 videos = data["videos"]
@@ -91,8 +89,8 @@ def main():
             elif "time_range" in data:
                 opts["time_range"] = data["time_range"]
 
-            landmark_labels = acm_load(acm_labels)["labels"]
-            landmark_frames = get_labeled_frames(landmark_labels).astype(int)
+            landmark_labels = label_lib.load(label_data)
+            landmark_frames = label_lib.get_labeled_frame_idxs(landmark_labels)
             cam_time_bases = get_cam_time_bases(landmark_frames, data["cam_fps"], data["cam_offsets"], opts)
 
             from bboVisO.process import run  # noqa: E402

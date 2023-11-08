@@ -14,8 +14,10 @@ from pathlib import Path
 from svidreader import get_reader
 from calibcamlib import Camerasystem
 
-from bboVisO import acm_labels
+from bbo import label_lib
 from bboVisO import helper
+
+from bbo import label_lib
 
 matplotlib.use('Qt5Agg')
 
@@ -33,7 +35,7 @@ class bboVisOchecker(QMainWindow):
         #     "calibration": data_tl["dataset"]["calibration_headcam"][calibration_type],
         #     "cam_offsets": data_tl_obj.get_headcam_time_offsets(timebase="battery_cycle") / data_tl_obj.time_factor,
         #     "cam_fps": data_tl_obj.get_headcam_fps(),
-        #     "acm_labels": data_tl["battery_cycle"]["landmark_labels"]["file"],
+        #     "label_lib": data_tl["battery_cycle"]["landmark_labels"]["file"],
         #     "landmark_coordinates": data_tl["dataset"]["landmark_coordinates"],
         #     "time_range": data_tl_obj.get_time_range() / data_tl_obj.time_factor,
         #     "videos": data_tl_obj.get_headcam_video_files(),
@@ -80,9 +82,9 @@ class bboVisOchecker(QMainWindow):
             low_error_mask
         )
 
-        label_data = acm_labels.load(data["acm_labels"])["labels"]
-        self.landmark_frames = acm_labels.get_labeled_frames(label_data).astype(int)
-        self.landmark_labels = sorted(acm_labels.get_labels(label_data))
+        label_data = label_lib.load(data["labels"])
+        self.landmark_frames = label_lib.get_labeled_frame_idxs(label_data)
+        self.landmark_labels = sorted(label_lib.get_labels(label_data))
 
         self.cam_time_bases = helper.get_cam_time_bases(self.landmark_frames, data["cam_fps"], data["cam_offsets"],
                                                         self.opts)
@@ -96,9 +98,9 @@ class bboVisOchecker(QMainWindow):
             landmark_data, self.landmark_labels)
         self.landmark_coords3d -= origin
 
-        self.landmark_imcoords, self.times = acm_labels.to_array(label_data, self.landmark_frames, self.landmark_labels,
+        self.landmark_imcoords, self.times = label_lib.to_array(label_data, self.landmark_frames, self.landmark_labels,
                                                                  time_bases=self.cam_time_bases,
-                                                                 landmarks_identity=landmarks_identity)
+                                                                 label_identity=landmarks_identity)
 
         self.time_idx = 0
         self.cam_idx = 0
