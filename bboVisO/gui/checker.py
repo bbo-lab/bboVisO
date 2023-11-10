@@ -50,18 +50,18 @@ class bboVisOchecker(QMainWindow):
 
         path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
 
-        viso_maxerrors_pd = pd.read_csv(path / f"{data['name']}_maxerror.csv", sep="\t", header=None)
+        viso_maxerrors_pd = pd.read_csv(path / f"maxerror.csv", sep="\t", header=None)
         viso_maxerrors_pd = viso_maxerrors_pd.sort_values(viso_maxerrors_pd.columns[0], ascending=True)
         self.viso_maxerrors = np.array(viso_maxerrors_pd[1]).T
 
-        viso_positions_pd = pd.read_csv(path / f"{data['name']}_cam_positions.csv", sep="\t")
+        viso_positions_pd = pd.read_csv(path / f"cam_positions.csv", sep="\t")
         self.viso_positions = np.array([
             viso_positions_pd["x0"],
             viso_positions_pd["y0"],
             viso_positions_pd["z0"],
         ]).T
 
-        viso_orientations_pd = pd.read_csv(path / f"{data['name']}_cam_orientations.csv", sep="\t")
+        viso_orientations_pd = pd.read_csv(path / f"cam_orientations.csv", sep="\t")
         viso_orientations_q = np.array([
             viso_orientations_pd["x0"],
             viso_orientations_pd["y0"],
@@ -98,7 +98,7 @@ class bboVisOchecker(QMainWindow):
             landmark_data, self.landmark_labels)
         self.landmark_coords3d -= origin
 
-        self.landmark_imcoords, self.times = label_lib.to_array(label_data, self.landmark_frames, self.landmark_labels,
+        self.landmark_imcoords, self.times = label_lib.to_numpy(label_data, self.landmark_frames, self.landmark_labels,
                                                                  time_bases=self.cam_time_bases,
                                                                  label_identity=landmarks_identity)
 

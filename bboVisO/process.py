@@ -36,7 +36,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
         landmark_coordinates, detected_labels)
     landmarks_all -= origin
 
-    landmark_imcoords, time_base = label_lib.to_array(landmark_labels, detected_frames, detected_labels,
+    landmark_imcoords, time_base = label_lib.to_numpy(landmark_labels, detected_frames, detected_labels,
                                                             time_bases=time_bases,
                                                             label_identity=landmarks_identity)
 

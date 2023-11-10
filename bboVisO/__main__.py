@@ -107,8 +107,7 @@ def main():
             if args.text_out:
                 path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
                 os.makedirs(path, exist_ok=True)
-                save_to_text(data["name"], path.as_posix(), res_time_base,
-                             landmarks, positions, oris, error_repro, landmark_labels)
+                save_to_text(path, res_time_base, landmarks, positions, oris, error_repro, landmark_labels)
 
             if args.img_out and videos is not None:
                 path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
