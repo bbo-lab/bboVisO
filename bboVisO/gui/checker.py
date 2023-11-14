@@ -68,6 +68,15 @@ class bboVisOchecker(QMainWindow):
             viso_orientations_pd["w0"],
         ]).T
         self.viso_orientations = R.from_quat(viso_orientations_q)
+
+        viso_landmarks_pd = pd.read_csv(path / f"landmarks.csv", sep="\t")
+        self.landmark_labels = list(viso_landmarks_pd["landmark"])
+        self.landmark_coords3d = np.array([
+            viso_landmarks_pd["x0"],
+            viso_landmarks_pd["y0"],
+            viso_landmarks_pd["z0"],
+        ]).T
+
         self.viso_times = np.array(viso_positions_pd["t_us"])
 
         self.check_mode = False
@@ -88,17 +97,11 @@ class bboVisOchecker(QMainWindow):
                                                         self.opts)
 
         landmark_data = data["landmark_coordinates"]
-        origin = np.array(landmark_data["origin"]["position"])
-        labels = sorted(list(landmark_data["landmarks"].keys()))
-        self.landmark_labels = [d for d in self.landmark_labels if d in labels]
-
-        self.landmark_coords3d, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_use = helper.landmarks_to_array(
-            landmark_data, self.landmark_labels)
-        self.landmark_coords3d -= origin
+        landmarks_identity = helper.landmarks_to_array(landmark_data, self.landmark_labels)[2]
 
         self.landmark_imcoords, self.times = label_lib.to_numpy(label_data, self.landmark_frames, self.landmark_labels,
-                                                                 time_bases=self.cam_time_bases,
-                                                                 label_identity=landmarks_identity)
+                                                                time_bases=self.cam_time_bases,
+                                                                label_identity=landmarks_identity)
 
         self.time_idx = 0
         self.cam_idx = 0
@@ -139,7 +142,7 @@ class bboVisOchecker(QMainWindow):
             self.update_frame()
 
     def set_cam_frame_idx(self, idx, update_frame=True):
-        time = self.cam_time_bases[self.cam_idx][np.min((len(self.cam_time_bases[self.cam_idx])-1, idx))]
+        time = self.cam_time_bases[self.cam_idx][np.min((len(self.cam_time_bases[self.cam_idx]) - 1, idx))]
         time_idx = np.argmin(np.abs(self.times - time))
         self.set_time_idx(time_idx, update_frame)
 

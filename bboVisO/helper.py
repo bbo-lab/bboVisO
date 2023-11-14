@@ -76,6 +76,8 @@ def interpolate_mask(time, pos, ori, mask):
     pos_interp_f = [interp1d(time[mask], p, fill_value='extrapolate') for p in pos[mask].T]
     pos_interp = np.array([i_f(time) for i_f in pos_interp_f]).T
 
+    mask[0] = True  # Serp cannot extrapolate
+    mask[-1] = True
     ori_spline = Slerp(time[mask], ori[mask])
     # ori_q = ori.as_quat()
     # ori_q = ori_q * np.sign(ori_q[:, (0,)])

@@ -4,7 +4,8 @@ import numpy as np
 from pathlib import Path
 
 
-def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, landmark_labels=False):
+def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro,
+                 landmark_labels=False):
     error_repro = error_repro.copy()
     error_repro[error_repro==0] = np.nan
     cs = "\t"
