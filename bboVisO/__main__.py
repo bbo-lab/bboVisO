@@ -93,6 +93,9 @@ def main():
             landmark_frames = label_lib.get_labeled_frame_idxs(landmark_labels)
             cam_time_bases = get_cam_time_bases(landmark_frames, data["cam_fps"], data["cam_offsets"], opts)
 
+            if opts["time_range"][1] == -1:
+                opts["time_range"][1] = max([c[-1] for c in cam_time_bases])
+
             from bboVisO.process import run  # noqa: E402
             calibs = np.load(calibration, allow_pickle=True)[()]["calibs"]
 

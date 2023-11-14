@@ -35,7 +35,7 @@ def infer_position_attitude(times, landmark_imcoords, calibs, opts_optim, opts,
         if isinstance(opt, list):
             opts_optim["max_nfev"] = opts["optimization"]["max_nfev"]
 
-        if opts["interpolate_high_error"] and i_iter > 0:
+        if opts["interpolate_high_error"] and opts["interpolate_high_error"] != -1 and i_iter > 0:
             print(f"Interpolating high errors")
             # This might help to get the system out of local minima in case of wrong markings.
             # The last step is always an optimization, though. The check_gui also implements this
@@ -466,20 +466,25 @@ def make_jacobian_sparsity_mask(k, n, mask_free_input):
     return jac_sparsity[:, mask_free_input]
 
 
-def interpolate_high_error(times, positions_opt, oris_flu_opt, calibs, opts, landmarks, optimize,
+def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, optimize,
                            landmark_imcoords=None,
                            landmark_vecs=None, landmarks_optimize=None):
+    if opts['interpolate_high_error'] == 0 or opts['interpolate_high_error'] == -1:
+        return positions, oris_flu
+
     vars_free, objfun_args, optim_args = make_optim_input(calibs, opts,
-                                                          landmarks, positions_opt, oris_flu_opt,
+                                                          landmarks, positions, oris_flu,
                                                           optimize=optimize, landmarks_optimize=landmarks_optimize,
                                                           precalc=precalc,
                                                           landmark_imcoords=landmark_imcoords,
                                                           landmark_vecs=landmark_vecs)
     repro_error = objfun_repro_wrapper(vars_free, objfun_args, no_ravel=True)
-    frame_max_errors = np.nanmax(np.nansum(repro_error ** 2, axis=-1), axis=-1)
+    frame_max_errors = np.nanmax(np.sqrt(np.nansum(repro_error ** 2, axis=-1)), axis=-1)
 
-    low_error_mask = frame_max_errors < 5000
+    low_error_mask = frame_max_errors < opts['interpolate_high_error']
+    print(f"Interpolated times ({np.sum(~low_error_mask)}/{len(low_error_mask)}): ",
+          ", ".join([str(n) for n in times[low_error_mask]]))
 
-    pos_interp, ori_interp = interpolate_mask(times, positions_opt, R.from_rotvec(oris_flu_opt), low_error_mask)
+    positions_interp, oris_flu_interp = interpolate_mask(times, positions, R.from_rotvec(oris_flu), low_error_mask)
 
-    return pos_interp, ori_interp.as_rotvec()
+    return positions_interp, oris_flu_interp.as_rotvec()

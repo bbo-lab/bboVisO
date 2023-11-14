@@ -31,7 +31,7 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, l
 
     aggr_error = np.nanmean(abserr, axis=-1)
     sort_idxs = np.argsort(aggr_error)[::-1]
-    with open(path_base + "meanerror.csv", "w") as file:
+    with open(path_base / "meanerror.csv", "w") as file:
         for e, f in zip(aggr_error[sort_idxs], time_base[sort_idxs]):
             file.write(f'{f}{cs}{e}\n')
 
