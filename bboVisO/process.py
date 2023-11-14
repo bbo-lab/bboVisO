@@ -68,6 +68,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     # opts_optim["jac"] = "3-point"
 
     landmarks_close_mean = np.nanmean(landmarks_all[~landmarks_far], axis=0)
+    landmarks_close_mean[2] += 5
     if np.any(~landmarks_far) and not np.any(np.isnan(landmarks_close_mean)):
         positions_opt = np.ones((len(time_base), 3)) * landmarks_close_mean
     else:
@@ -114,7 +115,9 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                      landmarks_init=landmarks_opt[landmarks_mask],
                                      positions_init=positions_opt,
                                      oris_flu_init=oris_flu_opt,
-                                     optimize=[["positions", "oris"], ["positions", "oris", "landmarks"]],
+                                     optimize=[["positions", "oris"],
+                                               ["positions", "oris", "landmarks"],
+                                               ["positions", "oris", "landmarks"]],
                                      landmarks_optimize=landmarks_optimize[landmarks_mask]
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask

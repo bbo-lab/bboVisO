@@ -14,9 +14,7 @@ from pathlib import Path
 from svidreader import get_reader
 from calibcamlib import Camerasystem
 
-from bbo import label_lib
 from bboVisO import helper
-from bboVisO import opts as viso_opts
 
 from bbo import label_lib
 
@@ -72,7 +70,6 @@ class bboVisOchecker(QMainWindow):
         self.viso_orientations = R.from_quat(viso_orientations_q)
         self.viso_times = np.array(viso_positions_pd["t_us"])
 
-        self.opts = viso_opts.get_opts()
         self.check_mode = False
 
         low_error_mask = self.viso_maxerrors < self.opts["interpolate_high_error"]

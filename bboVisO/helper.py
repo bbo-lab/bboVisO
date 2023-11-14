@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.interpolate import interp1d
-from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Slerp, Rotation as R
 
 def get_cam_time_bases(frame_idxs, cam_fps, cam_offsets, opts):
     offsets = (np.array(cam_offsets)).astype(np.uint64) + opts["add_offset"]
@@ -76,8 +76,10 @@ def interpolate_mask(time, pos, ori, mask):
     pos_interp_f = [interp1d(time[mask], p, fill_value='extrapolate') for p in pos[mask].T]
     pos_interp = np.array([i_f(time) for i_f in pos_interp_f]).T
 
-    ori_q = ori.as_quat()
-    ori_interp_f = [interp1d(time[mask], o, fill_value='extrapolate') for o in ori_q[mask].T]
-    ori_interp = np.array([i_f(time) for i_f in ori_interp_f]).T
+    ori_spline = Slerp(time[mask], ori[mask])
+    # ori_q = ori.as_quat()
+    # ori_q = ori_q * np.sign(ori_q[:, (0,)])
+    # ori_interp_f = [interp1d(time[mask], o, fill_value='extrapolate') for o in ori_q[mask].T]
+    # ori_interp = np.array([i_f(time) for i_f in ori_interp_f]).T
 
-    return pos_interp, R.from_quat(ori_interp)
+    return pos_interp, ori_spline(time)

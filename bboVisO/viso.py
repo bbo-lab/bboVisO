@@ -1,4 +1,6 @@
+import os
 import time
+from pathlib import Path
 
 import numpy as np
 import bboVisO.viso_ag as viso_ag
@@ -11,6 +13,7 @@ from calibcamlib.camerasystem import Camerasystem
 from bboVisO.geometry import align_positions_orientations, build_vector_bundle, align_rotation_vectors
 from calibcamlib.helper import intersect
 from bboVisO.helper import interpolate_mask
+from bboVisO.output import save_to_text
 
 debug = False
 precalc = None
@@ -46,6 +49,15 @@ def infer_position_attitude(times, landmark_imcoords, calibs, opts_optim, opts,
                                                                    landmark_vecs=landmark_vecs,
                                                                    landmark_imcoords=landmark_imcoords,
                                                                    landmarks_optimize=landmarks_optimize)
+            marker_mask = np.any(~np.isnan(landmark_imcoords), axis=(0, 1, -1))
+            np.sqrt(np.sum(
+                objfun_repro_runner(landmarks_init, positions_init, oris_flu_init, landmark_imcoords, calibs,
+                                    True)[:, marker_mask] ** 2,
+                axis=-1)).astype(int)
+
+            path = Path("~/tmp").expanduser().resolve() / "bboVisO_interp" / f"interp_{i_iter}"
+            os.makedirs(path, exist_ok=True)
+            save_to_text(path, times, landmarks_init, positions_init, oris_flu_init, error_repro)
 
         # Run optimization
         print(f"Optimizing {opt}")
@@ -64,6 +76,9 @@ def infer_position_attitude(times, landmark_imcoords, calibs, opts_optim, opts,
                                                    )
 
         landmarks_init, positions_init, oris_flu_init = unravel_vars(min_result.x, objfun_args)[:3]
+        error_repro = objfun_repro_runner(landmarks_init, positions_init, oris_flu_init, landmark_imcoords, calibs)
+        # Normalize e.g. too long vectors from multiple revolutions
+        oris_flu_init = R.from_rotvec(oris_flu_init).as_rotvec()
         max_pos_shift = np.max(np.abs(positions_prev - positions_init))
         positions_prev = positions_init
 
@@ -110,6 +125,15 @@ def align_results_by_perches(landmarks_real, landmarks, positions, oris_flu, fix
     positions = positions_aligned[1]
     oris_flu = orientations_aligned[0]
     return landmarks, positions, oris_flu
+
+
+def objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs, debug=False):
+    cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(calibs)
+
+    errors2d = viso_ag.objfun_repro(landmarks, positions, oris_flu,
+                                    landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, debug)
+
+    return np.nansum(errors2d, axis=0)
 
 
 def objfun_repro_wrapper(free_vars, args, no_ravel=False):
@@ -285,7 +309,7 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
         positions_init = positions  # TODO: Implement single position
     else:
         # Initialize to coordinate origin
-        positions_init = np.zeros((k, 3))  # We initialize to the size of orienatons, even for single position
+        positions_init = np.zeros((k, 3))  # We initialize to the size of orientations, even for single position
         # perch_mean = np.mean(landmarks[:2], axis=0)
         # for p in positions_init:
         #     p[:] = perch_mean
@@ -472,18 +496,14 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
     if opts['interpolate_high_error'] == 0 or opts['interpolate_high_error'] == -1:
         return positions, oris_flu
 
-    vars_free, objfun_args, optim_args = make_optim_input(calibs, opts,
-                                                          landmarks, positions, oris_flu,
-                                                          optimize=optimize, landmarks_optimize=landmarks_optimize,
-                                                          precalc=precalc,
-                                                          landmark_imcoords=landmark_imcoords,
-                                                          landmark_vecs=landmark_vecs)
-    repro_error = objfun_repro_wrapper(vars_free, objfun_args, no_ravel=True)
-    frame_max_errors = np.nanmax(np.sqrt(np.nansum(repro_error ** 2, axis=-1)), axis=-1)
+    repro_error = objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs)
+    abserrors = np.sqrt(np.nansum(repro_error ** 2, axis=-1))
+    abserrors[abserrors==0] = np.nan
+    frame_max_errors = np.nanmedian(abserrors, axis=-1)
 
     low_error_mask = frame_max_errors < opts['interpolate_high_error']
     print(f"Interpolated times ({np.sum(~low_error_mask)}/{len(low_error_mask)}): ",
-          ", ".join([str(n) for n in times[low_error_mask]]))
+          ", ".join([str(n) for n in times[~low_error_mask]]))
 
     positions_interp, oris_flu_interp = interpolate_mask(times, positions, R.from_rotvec(oris_flu), low_error_mask)
 

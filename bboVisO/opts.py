@@ -16,7 +16,7 @@ def get_opts():
         },
         'far_first': False,  # Optimize on only far landmarks first
         'close_first': False,  # Optimize on only close landmarks first
-        'interpolate_high_error': 50,  # After a first optimization run, interpolate position and orientation of
+        'interpolate_high_error': 15,  # After a first optimization run, interpolate position and orientation of
                                        #  high error frames as initialization for next optimization. Error is distance
                                        #  between marked and reprojected point. Deactivate with -1
         'time_range': [0, -1],

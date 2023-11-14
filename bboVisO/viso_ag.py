@@ -2,10 +2,11 @@ import jax.numpy as np
 from calibcam.helper_ag import rodrigues_as_rotmats
 import calibcam.camfunctions_ag as camfuncs_ag
 
-
 # TODO initialize attitude with lowest variance vecs
-def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts):
+def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, debug=False):
     # Generate landmark positions relative to camera system
+    if debug:
+        pass
     landmark_vecs = landmarks.reshape(1, -1, 3) - positions.reshape(-1, 1, 3)
     landmark_vecs = np.einsum('nji,nmj->nmi', rodrigues_as_rotmats(oris_flu), landmark_vecs)
 
