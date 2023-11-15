@@ -3,9 +3,12 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 from pathlib import Path
 
+from bboVisO.helper import landmarks_to_array
+
 
 def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro,
-                 landmark_labels=False):
+                 landmark_labels=False,
+                 landmark_coordinates=False):
     error_repro = error_repro.copy()
     error_repro[error_repro==0] = np.nan
     cs = "\t"
@@ -46,7 +49,23 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro,
             file.write(f'{f}{cs}{e}\n')
 
     if landmark_labels:
+        if landmark_coordinates:
+            origin = np.array(landmark_coordinates["origin"]["position"])
+
+            landmarks_all = landmarks_to_array(
+                landmark_coordinates, landmark_labels)[0]
+            landmarks_all -= origin
+            landmarks_diff = landmarks - landmarks_all
+
         with open(path_base / "landmarks.csv", "w") as file:
-            file.write(f'landmark{cs}x0{cs}y0{cs}z0\n')
+            file.write(f'landmark{cs}x0{cs}y0{cs}z0')
+            if landmark_coordinates:
+                file.write(f'{cs}dx0{cs}dy0{cs}dz0\n')
+            else:
+                file.write('\n')
             for i_lm, landmark in enumerate(landmarks):
-                file.write(f'{landmark_labels[i_lm]}{cs}{cs.join(np.char.mod("%f", landmark))}\n')
+                file.write(f'{landmark_labels[i_lm]}{cs}{cs.join(np.char.mod("%f", landmark))}')
+                if landmark_coordinates:
+                    file.write(f'{cs}{cs.join(np.char.mod("%f", landmarks_diff[i_lm]))}\n')
+                else:
+                    file.write('\n')

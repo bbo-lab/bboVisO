@@ -1,9 +1,10 @@
 import numpy as np
+from calibcamlib import Camerasystem
 from scipy.interpolate import interp1d
 from scipy.spatial.transform import Slerp, Rotation as R
 
 def get_cam_time_bases(frame_idxs, cam_fps, cam_offsets, opts):
-    offsets = (np.array(cam_offsets)).astype(np.uint64) + opts["add_offset"]
+    offsets = (np.array(cam_offsets)).astype(np.uint64)
 
     cam_time_bases = [
         (frame_idxs.astype(float) / float(fps)).astype(np.uint64) + offset
@@ -85,3 +86,67 @@ def interpolate_mask(time, pos, ori, mask):
     # ori_interp = np.array([i_f(time) for i_f in ori_interp_f]).T
 
     return pos_interp, ori_spline(time)
+
+
+def interpolate_imcoords(array_2d, array_time_base, calibs):
+    print("DEPRECATED:  interpolate_imcoords_rebase(array_2d, array_time_base, calibs, time_base=array_time_base) "
+          "is just as fast and more potent.")
+    cs = Camerasystem.from_calibs(calibs)
+
+    # This has shape cam x times x markers x coords
+    array_3d = cs.get_camera_lines(array_2d)[0]
+
+    pretimes = array_time_base[1:] - array_time_base[:-1]
+
+    array_3d_interp = (array_3d[:, :-2] * pretimes[1:][np.newaxis, ..., np.newaxis, np.newaxis] +
+                       array_3d[:, 2:] * pretimes[:-1][np.newaxis, ..., np.newaxis, np.newaxis])
+    array_3d_interp /= np.linalg.norm(array_3d_interp, axis=-1, keepdims=True)
+
+    # This changes array_3d in place, replacing only the values previously nan
+    array_3d_ireg = array_3d[:, 1:-1]
+    array_3d_ireg[np.isnan(array_3d_ireg)] = array_3d_interp[np.isnan(array_3d_ireg)]
+
+    # This has shape cam x cam x times x markers x coords
+    array_2d_interp = cs.project_dir(array_3d)
+
+    # Replace only entries that were previously nan.
+    array_2d_out = array_2d.copy()
+    for i_cam in range(len(array_2d_out)):
+        array_2d_out[i_cam][np.isnan(array_2d_out[i_cam])] = array_2d_interp[i_cam, i_cam][np.isnan(array_2d_out[i_cam])]
+
+
+    return array_2d_out, array_time_base
+
+
+def interpolate_imcoords_rebase(array_2d, array_time_base, calibs, dt, time_base=None):
+    cs = Camerasystem.from_calibs(calibs)
+    array_3d = cs.get_camera_lines(array_2d)[0]
+
+    if time_base is None:
+        time_base = array_time_base
+
+    array_3d_interp = np.full((array_2d.shape[0], len(time_base), array_2d.shape[2], 3), np.nan)
+    for i_c, array_3d_cam in enumerate(array_3d):
+        array_3d_cam = array_3d_cam.transpose((1, 0, 2))
+        for i_m, array_3d_cam_marker in enumerate(array_3d_cam):
+            if i_m == 123:
+                pass
+            nan_mask = np.any(np.isnan(array_3d_cam_marker), axis=-1)
+            if np.sum(~nan_mask)<2:
+                continue
+            no_nan_array_time_base = array_time_base[~nan_mask]
+            array_3d_cam_marker_if = [interp1d(array_time_base[~nan_mask], a, fill_value="extrapolate") for a in array_3d_cam_marker[~nan_mask].T]
+            array_3d_cam_marker_i = np.array([i_f(time_base) for i_f in array_3d_cam_marker_if]).T
+            array_3d_cam_marker_i[~generate_immediate_neighbor_mask(time_base, no_nan_array_time_base, dt)] = np.nan
+            array_3d_interp[i_c, :, i_m] = array_3d_cam_marker_i
+
+
+    array_2d_interp = cs.project_dir(array_3d_interp)
+    array_2d_out = np.diagonal(array_2d_interp, axis1=0, axis2=1).transpose((3, 0, 1, 2))
+
+    return array_2d_out, time_base
+
+def generate_immediate_neighbor_mask(ts, neighbor_ts, max_dist):
+    ts = ts.reshape((-1,))
+    neighbor_ts = neighbor_ts.reshape((-1,1))
+    return np.any((ts >= neighbor_ts - max_dist) & (ts <= neighbor_ts), axis=0) & np.any((ts <= neighbor_ts + max_dist) & (ts >= neighbor_ts), axis=0)

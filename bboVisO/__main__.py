@@ -91,7 +91,14 @@ def main():
 
             landmark_labels = label_lib.load(label_data)
             landmark_frames = label_lib.get_labeled_frame_idxs(landmark_labels)
-            cam_time_bases = get_cam_time_bases(landmark_frames, data["cam_fps"], data["cam_offsets"], opts)
+
+            # These are the times of landmark_frames
+            # if is supplied "cam_time_bases", it is taken from here, else calculated from fps and offsets
+            if "cam_time_bases" in data:
+                cam_time_bases = [ct[landmark_frames] for ct in data["cam_time_bases"]]
+            else:
+                cam_time_bases = get_cam_time_bases(landmark_frames, data["cam_fps"], data["cam_offsets"], opts)
+            cam_time_bases = [ct + ao for ct, ao in zip(cam_time_bases, opts["add_offset"])]
 
             if opts["time_range"][1] == -1:
                 opts["time_range"][1] = max([c[-1] for c in cam_time_bases])
@@ -110,7 +117,7 @@ def main():
             if args.text_out:
                 path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
                 os.makedirs(path, exist_ok=True)
-                save_to_text(path, res_time_base, landmarks, positions, oris, error_repro, landmark_labels)
+                save_to_text(path, res_time_base, landmarks, positions, oris, error_repro, landmark_labels, landmark_coordinates)
 
             if args.img_out and videos is not None:
                 path = Path(opts["text_out"]).expanduser().resolve() / data["name"]

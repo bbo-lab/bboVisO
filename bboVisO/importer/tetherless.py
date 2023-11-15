@@ -11,6 +11,7 @@ def load(yml_path, opts):
         "calibration": data_tl["dataset"]["calibration_headcam"][calibration_type],
         "cam_offsets": data_tl_obj.get_headcam_time_offsets(timebase="battery_cycle").astype(float),
         "cam_fps": data_tl_obj.get_headcam_fps().astype(float) / data_tl_obj.time_factor,
+        "cam_time_bases": data_tl_obj.get_headcam_times(timebase="battery_cycle"),
         "labels": data_tl["battery_cycle"]["landmark_labels"]["file"],
         "landmark_coordinates": yaml.load(data_tl["dataset"]["landmark_coordinates"])["landmark_coordinates"],
         "time_range": data_tl_obj.get_time_range().astype(float),

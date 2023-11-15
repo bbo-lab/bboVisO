@@ -1,10 +1,11 @@
+import time
+
 import jax.config
 import numpy as np
 
 import bboVisO.viso as viso
-from calibcamlib import Camerasystem
 
-from bboVisO.helper import landmarks_to_array
+from bboVisO.helper import landmarks_to_array, interpolate_imcoords_rebase, interpolate_imcoords
 
 from bbo import label_lib
 
@@ -52,7 +53,10 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     landmark_imcoords = landmark_imcoords[:, time_base_mask]
     time_base = time_base[time_base_mask]
 
-    landmark_imcoords, time_base = interpolate(landmark_imcoords, time_base, time_base, calibs)
+    landmark_imcoords_orig = landmark_imcoords.copy()
+    landmark_imcoords, time_base = interpolate_imcoords_rebase(landmark_imcoords_orig, time_base, calibs,
+                                                               1.001*np.median(np.diff(time_bases)), time_base)
+    # landmark_imcoords2, time_base2 = interpolate_imcoords(landmark_imcoords_orig, time_base, calibs)
 
     # Cut down to points with sufficient landmarks
     sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) >= opts["min_labels"]
@@ -68,7 +72,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     # opts_optim["jac"] = "3-point"
 
     landmarks_close_mean = np.nanmean(landmarks_all[~landmarks_far], axis=0)
-    landmarks_close_mean[2] += 5
+    landmarks_close_mean[2] += 30
     if np.any(~landmarks_far) and not np.any(np.isnan(landmarks_close_mean)):
         positions_opt = np.ones((len(time_base), 3)) * landmarks_close_mean
     else:
@@ -78,6 +82,8 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
 
     # positions_opt = np.array([[28.50096, -89.76008,  -5.64328]])
     # oris_flu_opt = np.array([[1.53225326, -1.46680443, -1.89735577]])
+
+    landmarks_orig = landmarks_opt.copy()
 
     # Only optimize p&o for far away landmarks.
     if opts["far_first"]:
@@ -122,13 +128,9 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
 
-    vars_free_opt, args_opt = \
-        viso.make_optim_input(calibs, opts, landmarks_opt[landmarks_mask], positions_opt,
-                              oris_flu_opt, landmark_imcoords=landmark_imcoords[:, :, landmarks_mask],
-                              optimize=[["positions", "oris", "landmarks"]],
-                              landmarks_optimize=landmarks_optimize[landmarks_mask]
-                              )[0:2]
-    error_repro = viso.objfun_repro_wrapper(vars_free_opt, args_opt, no_ravel=True)
+    error_repro = viso.objfun_repro_runner(landmarks_opt[landmarks_mask], positions_opt,
+                                           oris_flu_opt, landmark_imcoords[:, :, landmarks_mask], calibs)
+    error_repro[error_repro==0] = np.nan
     print(f"Optimized repro cost: {0.5 * np.sum(error_repro ** 2)}")
 
     abserr = np.sqrt(np.sum(error_repro ** 2, axis=-1))
@@ -143,24 +145,3 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     return landmarks, positions, oris_flu, time_base, landmark_imcoords, error_repro, detected_labels
 
 
-def interpolate(array_2d, array_time_base, time_base, calibs):
-    # TODO implement interpolation to a new time base time_base
-    cs = Camerasystem.from_calibs(calibs)
-    array_3d = cs.get_camera_lines(array_2d)[0]
-
-    pretimes = array_time_base[1:] - array_time_base[:-1]
-
-    array_3d_interp = (array_3d[:, :-2] * pretimes[:-1][np.newaxis, ..., np.newaxis, np.newaxis] +
-                       array_3d[:, 2:] * pretimes[1:][np.newaxis, ..., np.newaxis, np.newaxis])
-    array_3d_interp /= np.linalg.norm(array_3d_interp, axis=-1, keepdims=True)
-
-    array_3d_ireg = array_3d[:, 1:-1]
-    array_3d_ireg[np.isnan(array_3d_ireg)] = array_3d_interp[np.isnan(array_3d_ireg)]
-
-    array_2d_interp = cs.project_dir(array_3d)
-    array_2d_out = array_2d.copy()
-    for i_cam in range(len(array_2d_out)):
-        array_2d_out[i_cam][np.isnan(array_2d_out[i_cam])] = array_2d_interp[i_cam, i_cam][np.isnan(array_2d_out[i_cam])]
-
-
-    return array_2d_out, array_time_base
