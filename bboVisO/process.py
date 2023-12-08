@@ -2,10 +2,12 @@ import time
 
 import jax.config
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 import bboVisO.viso as viso
 
-from bboVisO.helper import landmarks_to_array, interpolate_imcoords_rebase, interpolate_imcoords
+from bboVisO.helper import (landmarks_to_array, interpolate_imcoords_rebase, interpolate_imcoords,
+                            realign_by_distant_features)
 
 from bbo import label_lib
 
@@ -55,7 +57,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
 
     landmark_imcoords_orig = landmark_imcoords.copy()
     landmark_imcoords, time_base = interpolate_imcoords_rebase(landmark_imcoords_orig, time_base, calibs,
-                                                               1.001*np.median(np.diff(time_bases)), time_base)
+                                                               0.999*np.median(np.diff(time_bases)), time_base)
     # landmark_imcoords2, time_base2 = interpolate_imcoords(landmark_imcoords_orig, time_base, calibs)
 
     # Cut down to points with sufficient landmarks
@@ -141,6 +143,11 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
         f"Highest max error time: {time_base[np.argpartition(np.nanmax(abserr, axis=-1), -error_n)[-error_n:]]}")
 
     landmarks, positions, oris_flu = (landmarks_opt, positions_opt, oris_flu_opt)
+
+    if opts["realign_by_distant_features"]:
+        print("realign_by_distant_features")
+        oris_flu = realign_by_distant_features(landmarks_opt[landmarks_mask], landmark_imcoords[:, :, landmarks_mask],
+                                               time_base, positions, R.from_rotvec(oris_flu), calibs).as_rotvec()
 
     return landmarks, positions, oris_flu, time_base, landmark_imcoords, error_repro, detected_labels
 

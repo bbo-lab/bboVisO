@@ -7,12 +7,10 @@ import bboVisO.viso_ag as viso_ag
 from jax import jit, jacfwd as jacobian  # jacfwd is recommended for 'tall' jacobians_repro, jacrev for 'wide'
 from scipy.spatial.transform import Rotation as R
 from scipy.optimize import least_squares, OptimizeResult
-from scipy.interpolate import make_interp_spline, interp1d
 
-from calibcamlib.camerasystem import Camerasystem
-from bboVisO.geometry import align_positions_orientations, build_vector_bundle, align_rotation_vectors
+from bboVisO.geometry import align_positions_orientations, build_vector_bundle
 from calibcamlib.helper import intersect
-from bboVisO.helper import interpolate_mask
+from bboVisO.helper import interpolate_mask, landmark_vecs_from_imcoords
 from bboVisO.output import save_to_text
 
 debug = False
@@ -260,14 +258,6 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
     }
 
     return vars_free, obfun_args, optim_args
-
-
-def landmark_vecs_from_imcoords(landmark_imcoords, calibs):
-    cs = Camerasystem.from_calibs(calibs)
-    landmark_vecs = np.nanmean(cs.get_camera_lines(landmark_imcoords)[0], axis=0)
-    landmark_vecs /= np.linalg.norm(landmark_vecs, axis=-1, keepdims=True)  # Norm in case of averaging
-    landmark_vecs[np.all(landmark_vecs == 0, axis=-1)] = np.nan
-    return landmark_vecs
 
 
 def make_initialization(landmark_vectors, calibs, opts, landmarks=None, positions=None, oris_flu=None,

@@ -92,7 +92,8 @@ class bboVisOchecker(QMainWindow):
 
         label_data = label_lib.load(data["labels"])
         self.landmark_frames = label_lib.get_labeled_frame_idxs(label_data)
-        self.landmark_labels = sorted(label_lib.get_labels(label_data))
+        # self.landmark_labels = sorted(label_lib.get_labels(label_data))
+        # detected_labels = [d for d in detected_labels if d in self.landmark_labels]
 
         if "cam_time_bases" in data:
             self.cam_time_bases = [ct[self.landmark_frames] for ct in data["cam_time_bases"]]
@@ -109,7 +110,7 @@ class bboVisOchecker(QMainWindow):
 
         dt = np.median(np.diff(self.cam_time_bases))
         self.landmark_imcoords = helper.interpolate_imcoords_rebase(self.landmark_imcoords, self.times, calibs,
-                                                                    1.001*dt, self.times)[0]
+                                                                    0.999*dt, self.times)[0]
         # self.landmark_imcoords, self.times = helper.interpolate_imcoords(self.landmark_imcoords, self.times,
         #                                                                         calibs)
 
@@ -139,12 +140,12 @@ class bboVisOchecker(QMainWindow):
         cam_idxs = np.where(self.cam_time_bases[self.cam_idx] == self.times[self.time_idx])[0]
         if len(cam_idxs)>0:
             self.cam_frame_idx = cam_idxs[0]
-            landmark_frames = self.landmark_frames[self.cam_frame_idx]
+            landmark_frame = self.landmark_frames[self.cam_frame_idx]
         else:
             self.cam_frame_idx = -1
-            landmark_frames = -1
+            landmark_frame = -1
         self.components["controls"]["edit_fr"].blockSignals(True)
-        self.components["controls"]["edit_fr"].setText(str(landmark_frames))
+        self.components["controls"]["edit_fr"].setText(str(landmark_frame))
         self.components["controls"]["edit_fr"].blockSignals(False)
 
         # Set slider
@@ -301,8 +302,17 @@ class bboVisOchecker(QMainWindow):
         self.set_time_idx(np.argmin(np.abs(self.times - value)))
 
     def on_edit_fr_change(self):
-        value = int(self.components["controls"]["edit_fr"].text())
-        self.set_cam_frame_idx(value)  #TODO: boundaries
+        idx = int(self.components["controls"]["edit_fr"].text())
+
+        cam_time_idx = np.where(self.landmark_frames == idx)[0]
+        if len(cam_time_idx) == 0:
+            print("Frame not in viso")
+            self.set_cam_frame_idx(self.cam_frame_idx)
+            return
+
+        time = self.cam_time_bases[self.cam_idx][cam_time_idx]
+
+        self.set_time(time)
 
     def on_dropdown_change(self, index):
         selected_option = self.components["controls"]["dropdown_cams"].itemText(index)

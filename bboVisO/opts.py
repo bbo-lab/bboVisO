@@ -22,6 +22,7 @@ def get_opts():
         'time_range': [0, -1],
         'min_labels': 4,  # Require min_labels detected per frame
         'single_position': False,  # object stays in one position, only estimate single position + rotations
-        'time_dtype': float,
-        'add_offset': [],
+        'time_dtype': float,  # Data type of time output. Mostly for resetting within custom importers, e.g. with µs
+        'add_offset': [],  # Add an offset to time, for subframe alignment
+        'realign_by_distant_features': True,  # Realign camera with only further half of landmarks after optimization
     }
