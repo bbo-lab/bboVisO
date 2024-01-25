@@ -2,6 +2,7 @@ import os
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 from pathlib import Path
+import pandas as pd
 
 from bboVisO.helper import landmarks_to_array
 
@@ -13,40 +14,50 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro,
     error_repro[error_repro==0] = np.nan
     cs = "\t"
     path_base = Path(path)
-    with open(path_base / "cam_positions.csv", "w") as file:
+
+    position_file = path_base / "cam_positions.csv"
+    # if position_file.is_file():
+    #     position_pd = pd.read_csv(position_file, sep="\t", comment="#")
+    #     position_pd.set_index("t_us", inplace=True)
+    #     position_pd.drop(
+    #         position_pd[
+    #             (position_pd.index >= time_base[0]) & (position_pd.index <= time_base[-1])
+    #             ].index, inplace=True
+    #     )
+    with open(position_file, "w") as file:
         file.write(f't_us{cs}x0{cs}y0{cs}z0\n')
         for p, f in zip(positions, time_base):
-            file.write(f'{f}{cs}{cs.join(np.char.mod("%f", p))}\n')
+            file.write(f'{f}{cs}{cs.join(np.char.mod("%.3f", p))}\n')
 
     with open(path_base / "cam_orientations.csv", "w") as file:
         file.write(f't_us{cs}x0{cs}y0{cs}z0{cs}w0\n')
         for o, f in zip(oris_flu, time_base):
-            file.write(f'{f}{cs}{cs.join(np.char.mod("%f", R.from_rotvec(o).as_quat()))}\n')
+            file.write(f'{f}{cs}{cs.join(np.char.mod("%.3f", R.from_rotvec(o).as_quat()))}\n')
 
     abserr = np.sqrt(np.sum(error_repro ** 2, axis=-1))
     abserr[abserr == 0] = np.nan
 
     with open(path_base / "error.csv", "w") as file:
         for o, f in zip(abserr, time_base):
-            file.write(f'{f}{cs}{cs.join(np.char.mod("%f", o))}\n')
+            file.write(f'{f}{cs}{cs.join(np.char.mod("%.3f", o))}\n')
 
     aggr_error = np.nanmax(abserr, axis=-1)
     sort_idxs = np.argsort(aggr_error)[::-1]
     with open(path_base / "maxerror.csv", "w") as file:
         for e, f in zip(aggr_error[sort_idxs], time_base[sort_idxs]):
-            file.write(f'{f}{cs}{e}\n')
+            file.write(f'{f}{cs}{e:.3f}\n')
 
     aggr_error = np.nanmean(abserr, axis=-1)
     sort_idxs = np.argsort(aggr_error)[::-1]
     with open(path_base / "meanerror.csv", "w") as file:
         for e, f in zip(aggr_error[sort_idxs], time_base[sort_idxs]):
-            file.write(f'{f}{cs}{e}\n')
+            file.write(f'{f}{cs}{e:.3f}\n')
 
     aggr_error = np.nanmedian(abserr, axis=-1)
     sort_idxs = np.argsort(aggr_error)[::-1]
     with open(path_base / "medianerror.csv", "w") as file:
         for e, f in zip(aggr_error[sort_idxs], time_base[sort_idxs]):
-            file.write(f'{f}{cs}{e}\n')
+            file.write(f'{f}{cs}{e:.3f}\n')
 
     if landmark_labels:
         if landmark_coordinates:

@@ -43,7 +43,6 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                                             time_bases=time_bases,
                                                             label_identity=landmarks_identity)
 
-
     # Cut down to range actually filled with data
     data_mask = np.any(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2))
     data_idxs = np.where(data_mask)[0]
@@ -57,13 +56,14 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
 
     landmark_imcoords_orig = landmark_imcoords.copy()
     landmark_imcoords, time_base = interpolate_imcoords_rebase(landmark_imcoords_orig, time_base, calibs,
-                                                               0.999*np.median(np.diff(time_bases)), time_base)
+                                                               1.01*np.median(np.diff(time_bases)), time_base)
     # landmark_imcoords2, time_base2 = interpolate_imcoords(landmark_imcoords_orig, time_base, calibs)
 
     # Cut down to points with sufficient landmarks
     sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) >= opts["min_labels"]
 
     time_base = time_base[sufficient_mask]
+    print(time_base[(0,-1),])
     landmark_imcoords = landmark_imcoords[:, sufficient_mask]
 
     # Optimize

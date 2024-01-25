@@ -98,7 +98,7 @@ def main():
                 cam_time_bases = [ct[landmark_frames] for ct in data["cam_time_bases"]]
             else:
                 cam_time_bases = get_cam_time_bases(landmark_frames, data["cam_fps"], data["cam_offsets"], opts)
-            cam_time_bases = [ct + ao for ct, ao in zip(cam_time_bases, opts["add_offset"])]
+            cam_time_bases = [(ct + ao).astype(opts["time_dtype"]) for ct, ao in zip(cam_time_bases, opts["add_offset"])]
 
             if opts["time_range"][1] == -1:
                 opts["time_range"][1] = max([c[-1] for c in cam_time_bases])
