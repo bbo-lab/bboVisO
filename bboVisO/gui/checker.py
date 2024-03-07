@@ -263,6 +263,10 @@ class bboVisOchecker(QMainWindow):
         self.components["controls"]["button_check"].setCheckable(True)
         check_layout.addWidget(self.components["controls"]["button_check"])
 
+        self.components["controls"]["button_snap"] = QPushButton('Snap SVG', self)
+        self.components["controls"]["button_snap"].setFixedWidth(80)
+        check_layout.addWidget(self.components["controls"]["button_snap"])
+
         vlayout.addLayout(check_layout)
 
         # Connecting slider and text input
@@ -277,6 +281,7 @@ class bboVisOchecker(QMainWindow):
         self.components["controls"]["button_t_prev"].clicked.connect(self.on_button_t_prev_change)
         self.components["controls"]["button_t_next"].clicked.connect(self.on_button_t_next_change)
         self.components["controls"]["button_check"].clicked.connect(self.on_button_check_toggle)
+        self.components["controls"]["button_snap"].clicked.connect(self.on_button_snap)
 
     def on_button_check_toggle(self):
         self.check_mode = self.components["controls"]["button_check"].isChecked()
@@ -293,6 +298,11 @@ class bboVisOchecker(QMainWindow):
 
     def on_button_t_next_change(self):
         self.set_time_idx(np.min((len(self.times) - 1, self.time_idx + 1)), switch_cam=True)
+
+    def on_button_snap(self):
+        filename = Path('~') / f"bboViso_t{self.times[self.time_idx]}_c{self.cam_idx}.svg"
+        self.components["main"]["figure"].savefig(filename.expanduser().resolve().as_posix())
+        print(f"Canvas saved to {filename}")
 
     def on_slider_t_released(self):
         self.set_time_idx(self.components["controls"]["slider_t"].value())  # Divide by 10 to get actual values
@@ -367,6 +377,10 @@ class bboVisOchecker(QMainWindow):
             ax.plot(*imcoords_proj.T, 'bx')
             for ic, ic_p in zip(imcoords, imcoords_proj):
                 ax.plot(*np.vstack((ic, ic_p)).T, "r--", zorder=0)
+
+            for i, ic in enumerate(imcoords_proj):
+                if not np.any(np.isnan(ic)):
+                    print(f"{self.landmark_labels[i]}\t{ic[0]}\t{ic[1]}")
         else:
             print(self.times[self.time_idx], "not in viso")
 

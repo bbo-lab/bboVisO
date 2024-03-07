@@ -36,10 +36,13 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     assert set(detected_labels).issubset(labels), "Some detected labels are unknown"
 
     landmarks_all, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_use = landmarks_to_array(
-        landmark_coordinates, detected_labels)
+        landmark_coordinates, labels)
     landmarks_all -= origin
 
-    landmark_imcoords, time_base = label_lib.to_numpy(landmark_labels, detected_frames, detected_labels,
+    # Do not use labels that have never been marked
+    landmarks_use &= np.array([l in detected_labels for l in labels])
+
+    landmark_imcoords, time_base = label_lib.to_numpy(landmark_labels, detected_frames, labels,
                                                             time_bases=time_bases,
                                                             label_identity=landmarks_identity)
 
@@ -149,6 +152,6 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
         oris_flu = realign_by_distant_features(landmarks_opt[landmarks_mask], landmark_imcoords[:, :, landmarks_mask],
                                                time_base, positions, R.from_rotvec(oris_flu), calibs).as_rotvec()
 
-    return landmarks, positions, oris_flu, time_base, landmark_imcoords, error_repro, detected_labels
+    return landmarks, positions, oris_flu, time_base, landmark_imcoords, error_repro, labels
 
 

@@ -47,15 +47,21 @@ def infer_position_attitude(times, landmark_imcoords, calibs, opts_optim, opts,
                                                                    landmark_vecs=landmark_vecs,
                                                                    landmark_imcoords=landmark_imcoords,
                                                                    landmarks_optimize=landmarks_optimize)
-            marker_mask = np.any(~np.isnan(landmark_imcoords), axis=(0, 1, -1))
-            np.sqrt(np.sum(
-                objfun_repro_runner(landmarks_init, positions_init, oris_flu_init, landmark_imcoords, calibs,
-                                    True)[:, marker_mask] ** 2,
-                axis=-1)).astype(int)
 
-            path = Path("~/tmp").expanduser().resolve() / "bboVisO_interp" / f"interp_{i_iter}"
-            os.makedirs(path, exist_ok=True)
-            save_to_text(path, times, landmarks_init, positions_init, oris_flu_init, error_repro)
+            # Debug stuff
+            # marker_mask = np.any(~np.isnan(landmark_imcoords), axis=(0, 1, -1))
+            # np.sqrt(np.sum(
+            #     objfun_repro_runner(landmarks_init, positions_init, oris_flu_init, landmark_imcoords, calibs,
+            #                         True)[:, marker_mask] ** 2,
+            #     axis=-1)).astype(int)
+            #
+            # path = Path("~/tmp").expanduser().resolve() / "bboVisO_interp" / f"interp_{i_iter}"
+            # os.makedirs(path, exist_ok=True)
+            # save_to_text(path, times, landmarks_init, positions_init, oris_flu_init, error_repro)
+
+        if opts["interpolate_close_marker"] and opts["interpolate_close_marker"] != -1 and i_iter > 0:
+            positions_init, oris_flu_init = interpolate_close_marker(times, positions_init, oris_flu_init, opts=opts,
+                                                                     landmarks=landmarks_init)
 
         # Run optimization
         print(f"Optimizing {opt}")
@@ -488,13 +494,27 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
 
     repro_error = objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs)
     abserrors = np.sqrt(np.nansum(repro_error ** 2, axis=-1))
-    abserrors[abserrors==0] = np.nan
+    abserrors[abserrors == 0] = np.nan
     frame_max_errors = np.nanmedian(abserrors, axis=-1)
 
     low_error_mask = frame_max_errors < opts['interpolate_high_error']
-    print(f"Interpolated times ({np.sum(~low_error_mask)}/{len(low_error_mask)}): ",
+    print(f"High error - Interpolated times ({np.sum(~low_error_mask)}/{len(low_error_mask)}): ",
           ", ".join([str(n) for n in times[~low_error_mask]]))
 
     positions_interp, oris_flu_interp = interpolate_mask(times, positions, R.from_rotvec(oris_flu), low_error_mask)
+
+    return positions_interp, oris_flu_interp.as_rotvec()
+
+
+def interpolate_close_marker(times, positions, oris_flu, landmarks, opts):
+    if opts['interpolate_close_marker'] == 0 or opts['interpolate_close_marker'] == -1:
+        return positions, oris_flu
+
+    close_marker_mask = np.min(np.linalg.norm(positions[:, np.newaxis] - landmarks[np.newaxis], axis=-1), axis=1) < \
+                        opts['interpolate_close_marker']
+    print(f"In landmark - Interpolated times ({np.sum(~close_marker_mask)}/{len(close_marker_mask)}): ",
+          ", ".join([str(n) for n in times[~close_marker_mask]]))
+
+    positions_interp, oris_flu_interp = interpolate_mask(times, positions, R.from_rotvec(oris_flu), close_marker_mask)
 
     return positions_interp, oris_flu_interp.as_rotvec()
