@@ -3,7 +3,7 @@ from calibcam.helper_ag import rodrigues_as_rotmats
 import calibcam.camfunctions_ag as camfuncs_ag
 
 # TODO initialize attitude with lowest variance vecs
-def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, debug=False):
+def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight, debug=False):
     # Generate landmark positions relative to camera system
     if debug:
         pass
@@ -26,6 +26,13 @@ def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices
     landmark_coords = camfuncs_ag.ideal_to_sensor(landmark_coords, cam_matrices)
 
     errors2d = landmark_coords - landmark_imcoords
+
+    # We lightly penalize positions too close to landmarks
+    penalty = lm_close_pen_weight * np.sum(
+                    1/np.linalg.norm(landmarks[np.newaxis]-positions[:, np.newaxis], axis=-1),
+                    axis=-1)
+    print(np.max(penalty))
+    errors2d += penalty[np.newaxis, :, np.newaxis, np.newaxis]
 
     return errors2d
 

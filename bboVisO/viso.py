@@ -29,7 +29,7 @@ def infer_position_attitude(times, landmark_imcoords, calibs, opts_optim, opts,
     # optimize = cycle([["oris", "positions"], "landmarks"])  # Seems to converge to the same value
 
     t = time.time()
-    precalc = get_precalc()
+    precalc = get_precalc(opts)
     landmark_vecs = landmark_vecs_from_imcoords(landmark_imcoords, calibs)
     for i_iter, opt in enumerate(optimize):
         # If we are doing a full optimization, increase to full step count steps
@@ -80,13 +80,45 @@ def infer_position_attitude(times, landmark_imcoords, calibs, opts_optim, opts,
                                                    )
 
         landmarks_init, positions_init, oris_flu_init = unravel_vars(min_result.x, objfun_args)[:3]
-        error_repro = objfun_repro_runner(landmarks_init, positions_init, oris_flu_init, landmark_imcoords, calibs)
+
         # Normalize e.g. too long vectors from multiple revolutions
         oris_flu_init = R.from_rotvec(oris_flu_init).as_rotvec()
         max_pos_shift = np.max(np.abs(positions_prev - positions_init))
         positions_prev = positions_init
 
+        error_repro = objfun_repro_runner(landmarks_init, positions_init,
+                                          oris_flu_init, landmark_imcoords, calibs, opts)
+
         print(f"Max pos shift {max_pos_shift}")
+
+    for i_fr in range(len(positions_init)):
+        if i_fr == 453:
+            pass
+        # Run optimization
+        print(f"Optimizing single frames")
+        vars_free, objfun_args, optim_args = make_optim_input(calibs, opts,
+                                                              landmarks_init,
+                                                              positions_init[(i_fr,),], oris_flu_init[(i_fr,),],
+                                                              optimize=["positions", "oris"],
+                                                              landmarks_optimize=landmarks_optimize,
+                                                              precalc=precalc,
+                                                              landmark_imcoords=landmark_imcoords[:, (i_fr,),],
+                                                              landmark_vecs=landmark_vecs[(i_fr,),])
+
+        min_result: OptimizeResult = least_squares(objfun_repro_wrapper,
+                                                   vars_free,
+                                                   args=[objfun_args],
+                                                   **optim_args,
+                                                   **opts_optim
+                                                   )
+
+        landmarks_init, positions_init[i_fr], oris_flu_init[i_fr] = unravel_vars(min_result.x, objfun_args)[:3]
+        # Normalize e.g. too long vectors from multiple revolutions
+
+    oris_flu_init = R.from_rotvec(oris_flu_init).as_rotvec()
+    max_pos_shift = np.max(np.abs(positions_prev - positions_init))
+
+    print(f"Max pos shift {max_pos_shift}")
 
     print(f"Optimization took {time.time() - t} s")
 
@@ -131,21 +163,23 @@ def align_results_by_perches(landmarks_real, landmarks, positions, oris_flu, fix
     return landmarks, positions, oris_flu
 
 
-def objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs, debug=False):
+def objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs, opts):
     cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(calibs)
 
     errors2d = viso_ag.objfun_repro(landmarks, positions, oris_flu,
-                                    landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, debug)
+                                    landmark_imcoords,
+                                    cam_matrices, ks, xis, cam_Rs, cam_ts,
+                                    opts["lm_close_pen_weight"], True)
 
     return np.nansum(errors2d, axis=0)
 
 
 def objfun_repro_wrapper(free_vars, args, no_ravel=False):
     landmarks, positions, oris_flu, \
-        landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts = unravel_vars(free_vars, args)
+        landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight = unravel_vars(free_vars, args)
 
     errors2d = args['precalc']['objfunc_repro'](landmarks, positions, oris_flu,
-                                                landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts)
+                                                landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight)
 
     if no_ravel:
         return np.nansum(errors2d, axis=0)
@@ -155,7 +189,7 @@ def objfun_repro_wrapper(free_vars, args, no_ravel=False):
 
 def objfun_3d_wrapper(free_vars, args):
     landmarks, positions, oris_flu, \
-        landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts = unravel_vars(free_vars, args)
+        landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight = unravel_vars(free_vars, args)
 
     landmark_vecs = args["landmark_vecs"]
 
@@ -166,7 +200,7 @@ def objfun_3d_wrapper(free_vars, args):
 
 def objfun_repro_jacobian_wrapper(free_vars, args):
     landmarks, positions, oris_flu, \
-        landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts = unravel_vars(free_vars, args)
+        landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight = unravel_vars(free_vars, args)
 
     landmarks = np.where(landmarks == 0, 1e-8, landmarks)
     positions = np.where(positions == 0, 1e-8, positions)
@@ -251,7 +285,8 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
         'landmark_vecs': landmark_vecs,
         'single_position': opts["single_position"],
         'calibs': calibs,
-        'precalc': get_precalc() if precalc is None else precalc
+        'lm_close_pen_weight': opts["lm_close_pen_weight"],
+        'precalc': get_precalc(opts) if precalc is None else precalc
     }
 
     if not opts["single_position"]:
@@ -399,15 +434,15 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
     return vars_free, vars_full, mask_free_input
 
 
-def get_precalc():
+def get_precalc(opts):
     global precalc
 
     if precalc is None:
         precalc = {
-            'objfunc_repro': jit(viso_ag.objfun_repro),
-            'jacobians_repro': [jit(jacobian(viso_ag.objfun_repro, i_var)) for i_var in range(3)],
-            'objfunc_3d': jit(viso_ag.objfun_3d),
-            'jacobians_3d': [jit(jacobian(viso_ag.objfun_3d, i_var)) for i_var in range(3)],
+            'objfunc_repro': jit(viso_ag.objfun_repro, backend=opts["jax_backend"]),
+            'jacobians_repro': [jit(jacobian(viso_ag.objfun_repro, i_var), backend=opts["jax_backend"]) for i_var in range(3)],
+            'objfunc_3d': jit(viso_ag.objfun_3d, backend=opts["jax_backend"]),
+            'jacobians_3d': [jit(jacobian(viso_ag.objfun_3d, i_var), backend=opts["jax_backend"]) for i_var in range(3)],
         }
     return precalc
 
@@ -418,6 +453,7 @@ def unravel_vars(free_vars, args):
     landmark_imcoords = args["landmark_imcoords"]
     landmark_vecs = args["landmark_vecs"]
     cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(args["calibs"])
+    lm_close_pen_weight = args["lm_close_pen_weight"]
 
     if landmark_vecs is not None:
         k = landmark_vecs.shape[0]
@@ -446,7 +482,7 @@ def unravel_vars(free_vars, args):
         positions = np.repeat(positions, k, axis=0)
 
     oris_flu = vars_full[edges[2]:edges[3]].reshape(k, 3)
-    return landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts
+    return landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight
 
 
 def unpack_calibs(calib):
@@ -492,16 +528,36 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
     if opts['interpolate_high_error'] == 0 or opts['interpolate_high_error'] == -1:
         return positions, oris_flu
 
-    repro_error = objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs)
+    repro_error = objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs, opts)
     abserrors = np.sqrt(np.nansum(repro_error ** 2, axis=-1))
     abserrors[abserrors == 0] = np.nan
-    frame_max_errors = np.nanmedian(abserrors, axis=-1)
 
-    low_error_mask = frame_max_errors < opts['interpolate_high_error']
+    frame_errors = np.nanmax(abserrors, axis=-1)
+    low_error_mask = frame_errors < opts['interpolate_high_error']
+    #
+    # if np.sum(~low_error_mask)/len(low_error_mask)>0.7:
+    #     print("Too many high max errors, reverting to median error.")
+    #     frame_errors = np.nanmedian(abserrors, axis=-1)
+    #     low_error_mask = frame_errors < opts['interpolate_high_error']
+
     print(f"High error - Interpolated times ({np.sum(~low_error_mask)}/{len(low_error_mask)}): ",
           ", ".join([str(n) for n in times[~low_error_mask]]))
 
+    if np.sum(~low_error_mask)/len(low_error_mask)>0.95:
+        print("Too many high median errors, not interpolating.")
+        return positions, oris_flu
+
     positions_interp, oris_flu_interp = interpolate_mask(times, positions, R.from_rotvec(oris_flu), low_error_mask)
+
+    repro_error_interp = objfun_repro_runner(
+        landmarks, positions_interp, oris_flu_interp.as_rotvec(), landmark_imcoords, calibs, opts
+    )
+    abserrors_interp = np.sqrt(np.nansum(repro_error_interp ** 2, axis=-1))
+    abserrors_interp[abserrors_interp == 0] = np.nan
+    frame_errors_interp = np.nanmedian(abserrors_interp, axis=-1)
+    low_error_mask_interp = frame_errors_interp < opts['interpolate_high_error']
+    print(f"High error - left ({np.sum(~low_error_mask_interp)}/{len(low_error_mask_interp)}): ",
+          ", ".join([str(n) for n in times[~low_error_mask_interp]]))
 
     return positions_interp, oris_flu_interp.as_rotvec()
 
@@ -512,6 +568,12 @@ def interpolate_close_marker(times, positions, oris_flu, landmarks, opts):
 
     close_marker_mask = np.min(np.linalg.norm(positions[:, np.newaxis] - landmarks[np.newaxis], axis=-1), axis=1) < \
                         opts['interpolate_close_marker']
+
+    if not np.any(close_marker_mask):
+        return positions, oris_flu
+    elif opts['lm_close_pen_weight']>0:
+        print("Found positions in landmarks. This should be prevented by the penalty ...")
+
     print(f"In landmark - Interpolated times ({np.sum(~close_marker_mask)}/{len(close_marker_mask)}): ",
           ", ".join([str(n) for n in times[~close_marker_mask]]))
 

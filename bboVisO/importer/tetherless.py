@@ -16,7 +16,7 @@ def load(yml_path, opts):
         "cam_time_bases": data_tl_obj.get_headcam_times(timebase="battery_cycle"),
         "labels": data_tl["battery_cycle"]["landmark_labels"]["file"],
         "landmark_coordinates": yaml.load(data_tl["dataset"]["landmark_coordinates"])["landmark_coordinates"],
-        "time_range": data_tl_obj.get_time_range().astype(float),
+        "time_range": data_tl_obj.get_time_range(timebase="battery_cycle").astype(float),
         "videos": data_tl_obj.get_headcam_video_files(),
     }
     opts['time_dtype'] = int

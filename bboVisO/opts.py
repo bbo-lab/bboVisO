@@ -19,7 +19,7 @@ def get_opts():
         'interpolate_high_error': 15,  # After a first optimization run, interpolate position and orientation of
                                        #  high error frames as initialization for next optimization. Error is distance
                                        #  between marked and reprojected point. Deactivate with -1
-        'interpolate_close_marker': 1e3,  # After first optimization run, interpolate any position that is closer
+        'interpolate_close_marker': 1e-3,  # After first optimization run, interpolate any position that is closer
                                           # than this value to a labeled feature.
                                           # Deactivate with -1
         'time_range': [0, -1],
@@ -27,6 +27,9 @@ def get_opts():
         'single_position': False,  # object stays in one position, only estimate single position + rotations
         'time_dtype': float,  # Data type of time output. Mostly for resetting within custom importers, e.g. with µs
         'add_offset': [],  # Add an offset to time, for subframe alignment
-        'realign_by_distant_features': True,  # Realign camera with only further half of landmarks after optimization
+        'realign_by_distant_features': False,  # Realign camera with only further half of landmarks after optimization
         'jax_backend': 'cpu',
+        'lift_factor': 0.5,  # initial positions are lifted up by this factor
+        'lm_close_pen_weight': 0*1e-1     # penalty factor for positions close to landmarks (avoids positions falling
+                                        # exactly on landmarks)
     }

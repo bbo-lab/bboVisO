@@ -58,9 +58,10 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     time_base = time_base[time_base_mask]
 
     landmark_imcoords_orig = landmark_imcoords.copy()
-    landmark_imcoords, time_base = interpolate_imcoords_rebase(landmark_imcoords_orig, time_base, calibs,
-                                                               1.01*np.median(np.diff(time_bases)), time_base)
-    # landmark_imcoords2, time_base2 = interpolate_imcoords(landmark_imcoords_orig, time_base, calibs)
+    # landmark_imcoords, time_base = interpolate_imcoords_rebase(landmark_imcoords_orig, time_base, calibs,
+    #                                                            1.01*np.median(np.diff(time_bases)), time_base,
+    #                                                            time_bases)
+    landmark_imcoords, time_base = interpolate_imcoords(landmark_imcoords_orig, time_base, calibs, time_bases)
 
     # Cut down to points with sufficient landmarks
     sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) >= opts["min_labels"]
@@ -68,6 +69,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     time_base = time_base[sufficient_mask]
     print(time_base[(0,-1),])
     landmark_imcoords = landmark_imcoords[:, sufficient_mask]
+    # landmark_imcoords[1] = np.nan
 
     # Optimize
     # Reduce amount of steps for alternating updates
@@ -77,7 +79,9 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     # opts_optim["jac"] = "3-point"
 
     landmarks_close_mean = np.nanmean(landmarks_all[~landmarks_far], axis=0)
-    landmarks_close_mean[2] += 30
+    landmarks_close_mean[2] += np.nanmean(
+        np.linalg.norm(landmarks_all[~landmarks_far]-landmarks_close_mean, axis=-1)
+    )*opts["lift_factor"]
     if np.any(~landmarks_far) and not np.any(np.isnan(landmarks_close_mean)):
         positions_opt = np.ones((len(time_base), 3)) * landmarks_close_mean
     else:
@@ -85,8 +89,8 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     oris_flu_opt = None
     landmarks_opt = landmarks_all.copy()
 
-    # positions_opt = np.array([[28.50096, -89.76008,  -5.64328]])
-    # oris_flu_opt = np.array([[1.53225326, -1.46680443, -1.89735577]])
+    # positions_opt = np.array(len(time_base)*[[-0.269, 0.174, 1.177]])
+    # oris_flu_opt = np.array(len(time_base)*[R.from_quat([-0.90288534, -0.06999111,  0.0519934, 0.42094654]).as_rotvec()])
 
     landmarks_orig = landmarks_opt.copy()
 
@@ -128,13 +132,15 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                      oris_flu_init=oris_flu_opt,
                                      optimize=[["positions", "oris"],
                                                ["positions", "oris", "landmarks"],
+                                               ["positions", "oris", "landmarks"],
+                                               ["positions", "oris", "landmarks"],
                                                ["positions", "oris", "landmarks"]],
                                      landmarks_optimize=landmarks_optimize[landmarks_mask]
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
 
     error_repro = viso.objfun_repro_runner(landmarks_opt[landmarks_mask], positions_opt,
-                                           oris_flu_opt, landmark_imcoords[:, :, landmarks_mask], calibs)
+                                           oris_flu_opt, landmark_imcoords[:, :, landmarks_mask], calibs, opts)
     error_repro[error_repro==0] = np.nan
     print(f"Optimized repro cost: {0.5 * np.sum(error_repro ** 2)}")
 
