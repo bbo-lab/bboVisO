@@ -13,6 +13,8 @@ from scipy.spatial.transform import Rotation as R
 from pathlib import Path
 from svidreader import get_reader
 
+from bboVisO.opts import get_opts
+from bboVisO.viso import objfun_repro_runner
 from calibcamlib import Camerasystem
 
 from bboVisO import helper
@@ -45,14 +47,18 @@ class bboVisOchecker(QMainWindow):
         self.opts = opts
 
         calibration = data["calibration"]
-        calibs = np.load(calibration, allow_pickle=True)[()]["calibs"]
-        self.camera_system = Camerasystem.from_calibs(calibs)
+        self.calibs = np.load(calibration, allow_pickle=True)[()]["calibs"]
+        self.camera_system = Camerasystem.from_calibs(self.calibs)
 
         path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
 
         viso_maxerrors_pd = pd.read_csv(path / f"maxerror.csv", sep="\t", header=None)
         viso_maxerrors_pd = viso_maxerrors_pd.sort_values(viso_maxerrors_pd.columns[0], ascending=True)
         self.viso_maxerrors = np.array(viso_maxerrors_pd[1]).T
+
+        viso_errors_pd = pd.read_csv(path / f"error.csv", sep="\t", header=None)
+        viso_errors_pd = viso_errors_pd.sort_values(viso_errors_pd.columns[0], ascending=True)
+        self.viso_errors = np.array(viso_errors_pd).T
 
         viso_positions_pd = pd.read_csv(path / f"cam_positions.csv", sep="\t")
         self.viso_positions = np.array([
@@ -99,7 +105,7 @@ class bboVisOchecker(QMainWindow):
             self.cam_time_bases = [ct[self.landmark_frames] for ct in data["cam_time_bases"]]
         else:
             self.cam_time_bases = helper.get_cam_time_bases(self.landmark_frames, data["cam_fps"], data["cam_offsets"],
-                                                        self.opts)
+                                                            self.opts)
 
         landmark_data = data["landmark_coordinates"]
         landmarks_identity = helper.landmarks_to_array(landmark_data, self.landmark_labels)[2]
@@ -109,8 +115,8 @@ class bboVisOchecker(QMainWindow):
                                                                 label_identity=landmarks_identity)
 
         dt = np.median(np.diff(self.cam_time_bases))
-        self.landmark_imcoords = helper.interpolate_imcoords_rebase(self.landmark_imcoords, self.times, calibs,
-                                                                    0.999*dt, self.times)[0]
+        self.landmark_imcoords = helper.interpolate_imcoords_rebase(self.landmark_imcoords, self.times, self.calibs,
+                                                                    0.999 * dt, self.times)[0]
         # self.landmark_imcoords, self.times = helper.interpolate_imcoords(self.landmark_imcoords, self.times,
         #                                                                         calibs)
 
@@ -138,7 +144,7 @@ class bboVisOchecker(QMainWindow):
 
         # Set camera frame for time point
         cam_idxs = np.where(self.cam_time_bases[self.cam_idx] == self.times[self.time_idx])[0]
-        if len(cam_idxs)>0:
+        if len(cam_idxs) > 0:
             self.cam_frame_idx = cam_idxs[0]
             landmark_frame = self.landmark_frames[self.cam_frame_idx]
         else:
@@ -239,7 +245,7 @@ class bboVisOchecker(QMainWindow):
         cam_layout = QHBoxLayout()
         # Dropdown
         self.components["controls"]["dropdown_cams"] = QComboBox()
-        self.components["controls"]["dropdown_cams"].addItems([str(i) for i,_ in enumerate(self.cam_time_bases)])
+        self.components["controls"]["dropdown_cams"].addItems([str(i) for i, _ in enumerate(self.cam_time_bases)])
         cam_layout.addWidget(self.components["controls"]["dropdown_cams"])
 
         self.components["controls"]["button_fr_prev"] = QPushButton("<")
@@ -360,14 +366,29 @@ class bboVisOchecker(QMainWindow):
             if not self.check_mode:
                 pos = self.viso_positions[viso_idx]
                 ori_flu = self.viso_orientations[viso_idx]
+                print("Original mode")
             else:
                 pos = self.viso_positions_interp[viso_idx]
                 ori_flu = self.viso_orientations_interp[viso_idx]
+                print("Check mode")
+
+            opts = get_opts()
+            repro_error = objfun_repro_runner(
+                self.landmark_coords3d, pos[np.newaxis], ori_flu.as_rotvec()[np.newaxis],
+                self.landmark_imcoords[:, (self.time_idx,),],
+                self.calibs, opts
+            )
+            abserrors = np.sqrt(np.nansum(repro_error ** 2, axis=-1))
+            abserrors[abserrors == 0] = np.nan
 
             print("Max error:", self.viso_maxerrors[viso_idx])
+            print("Max error:", np.nanmax(abserrors))
+            print("Median error:", np.nanmedian(abserrors))
+            print("Mean error:", np.nanmean(abserrors))
+            print("Ssq error:", np.nansum(repro_error ** 2))
             print("Pos:", pos)
             print("Ori:", ori_flu.as_quat())
-            print("Dir:", ori_flu.apply(np.array([0,0,1])))
+            print("Dir:", ori_flu.apply(np.array([0, 0, 1])))
 
             rel_points = ori_flu.inv().apply(self.landmark_coords3d - pos)
 
