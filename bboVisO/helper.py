@@ -6,10 +6,16 @@ from scipy.spatial.transform import Slerp, Rotation as R
 def get_cam_time_bases(frame_idxs, cam_fps, cam_offsets, opts):
     offsets = (np.array(cam_offsets)).astype(np.uint64)
 
-    cam_time_bases = [
-        (frame_idxs.astype(float) / float(fps)).astype(np.uint64) + offset
-        for fps, offset in zip(cam_fps, offsets)
-    ]
+    cam_time_bases = []
+    for fps, offset in zip(cam_fps, offsets):
+        fps = float(fps)
+        offset_fr = offset*fps
+        # Round frame offset if very close to integer
+        if offset_fr-np.round(offset_fr)<0.01:
+            offset_fr = np.round(offset_fr)
+
+        cam_time_bases.append(((frame_idxs.astype(float) + offset_fr)/fps).astype(np.uint64))
+
     # Adjust time that are just off by 1us from float rounding, to not create an additional measurement
     for i_cam in range(1, len(cam_time_bases)):
         for i_t, t in enumerate(cam_time_bases[i_cam]):
@@ -74,6 +80,9 @@ def landmarks_to_array(landmark_coordinates, detected_labels):
 
 
 def interpolate_mask(time, pos, ori, mask):
+    if np.sum(mask)/len(mask)<0.25:
+        return pos, ori
+
     pos_interp_f = [interp1d(time[mask], p, fill_value='extrapolate') for p in pos[mask].T]
     pos_interp = np.array([i_f(time) for i_f in pos_interp_f]).T
 
@@ -88,10 +97,19 @@ def interpolate_mask(time, pos, ori, mask):
     return pos_interp, ori_spline(time)
 
 
-def interpolate_imcoords(array_2d, array_time_base, calibs):
-    print("DEPRECATED:  interpolate_imcoords_rebase(array_2d, array_time_base, calibs, time_base=array_time_base) "
-          "is just as fast and more potent.")
+def interpolate_imcoords(array_2d, array_time_base, calibs, sub_time_bases=None):
+    # Interpolates time points in array_2d that are not part of sub_time_bases
+
     cs = Camerasystem.from_calibs(calibs)
+
+    # create mask of frames that belong to one of the sub_time_bases that make up the array_time_base
+    if sub_time_bases is None:
+        sub_time_base_members = 2 * [np.ones_like(array_time_base, dtype=bool)]
+    else:
+        sub_time_base_members = []
+        for sub_time_base in sub_time_bases:
+            sub_time_base_members.append(np.isin(array_time_base, sub_time_base))
+    sub_time_base_members = np.array(sub_time_base_members)
 
     # This has shape cam x times x markers x coords
     array_3d = cs.get_camera_lines(array_2d)[0]
@@ -104,7 +122,9 @@ def interpolate_imcoords(array_2d, array_time_base, calibs):
 
     # This changes array_3d in place, replacing only the values previously nan
     array_3d_ireg = array_3d[:, 1:-1]
-    array_3d_ireg[np.isnan(array_3d_ireg)] = array_3d_interp[np.isnan(array_3d_ireg)]
+    for i_cam, sub_time_base_member in enumerate(sub_time_base_members):
+        mask = np.isnan(array_3d_ireg)[i_cam] & (~sub_time_base_member[1:-1, np.newaxis, np.newaxis])
+        array_3d_ireg[i_cam, mask] = array_3d_interp[i_cam, mask]
 
     # This has shape cam x cam x times x markers x coords
     array_2d_interp = cs.project_dir(array_3d)
@@ -129,8 +149,6 @@ def interpolate_imcoords_rebase(array_2d, array_time_base, calibs, dt, time_base
     for i_c, array_3d_cam in enumerate(array_3d):
         array_3d_cam = array_3d_cam.transpose((1, 0, 2))
         for i_m, array_3d_cam_marker in enumerate(array_3d_cam):
-            if i_m == 123:
-                pass
             nan_mask = np.any(np.isnan(array_3d_cam_marker), axis=-1)
             if np.sum(~nan_mask)<2:
                 continue
