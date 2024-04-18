@@ -2,8 +2,10 @@ import jax.numpy as np
 from calibcam.helper_ag import rodrigues_as_rotmats
 import calibcam.camfunctions_ag as camfuncs_ag
 
+
 # TODO initialize attitude with lowest variance vecs
-def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight, debug=False):
+def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts,
+                 lm_close_pen_weight, debug=False):
     # Generate landmark positions relative to camera system
     if debug:
         pass
@@ -28,13 +30,25 @@ def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices
     errors2d = landmark_coords - landmark_imcoords
 
     # We lightly penalize positions too close to landmarks
-    penalty = lm_close_pen_weight * np.sum(
-                    1/np.linalg.norm(landmarks[np.newaxis]-positions[:, np.newaxis], axis=-1),
-                    axis=-1)
-    print(np.max(penalty))
+    penalty = lm_close_pen_weight * calc_lm_close_penalty(landmarks, positions)
     errors2d += penalty[np.newaxis, :, np.newaxis, np.newaxis]
 
     return errors2d
+
+
+def objfun_angular(landmarks, positions, oris_flu, landmark_vecs, lm_close_pen_weight, debug=False):
+    pl_vecs = landmarks[np.newaxis] - positions[:, np.newaxis]
+    pl_vecs /= np.linalg.norm(pl_vecs, axis=-1, keepdims=True)
+
+    # errors_ang = 1 - np.sum(pl_vecs * np.einsum('nij,nmj->nmi', rodrigues_as_rotmats(oris_flu), landmark_vecs), axis=-1)
+    errors_ang = np.arccos(
+        np.sum(pl_vecs * np.einsum('nij,nmj->nmi', rodrigues_as_rotmats(oris_flu), landmark_vecs), axis=-1))
+
+    # We lightly penalize positions too close to landmarks
+    penalty = np.zeros(len(positions))  # lm_close_pen_weight * calc_lm_close_penalty(landmarks, positions)
+    errors_ang += penalty[:, np.newaxis]
+
+    return errors_ang
 
 
 def objfun_3d(landmarks, positions, oris_flu, landmark_vecs):
@@ -46,3 +60,9 @@ def objfun_3d(landmarks, positions, oris_flu, landmark_vecs):
     # errors3d = errors3d + 1 / np.tanh(np.sum((landmarks[:2]-landmarks[3][np.newaxis, :])**2)) - 1
 
     return errors3d
+
+
+def calc_lm_close_penalty(landmarks, positions):
+    return np.sum(
+        1 / np.linalg.norm(landmarks[np.newaxis] - positions[:, np.newaxis], axis=-1),
+        axis=-1)

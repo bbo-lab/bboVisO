@@ -5,6 +5,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 import bboVisO.viso as viso
+from bboVisO import opts
 
 from bboVisO.helper import (landmarks_to_array, interpolate_imcoords_rebase, interpolate_imcoords,
                             realign_by_distant_features)
@@ -21,6 +22,7 @@ viso.debug = True
 def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     # Names of all landmarks
     labels = sorted(list(landmark_coordinates["landmarks"].keys()))
+
     # Origin of resulting coordinate system
     origin = np.array(landmark_coordinates["origin"]["position"])
 
@@ -35,113 +37,106 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     # All marked labels must correspond to a landmark, coordinates may be empty or nan
     assert set(detected_labels).issubset(labels), "Some detected labels are unknown"
 
+    # Convert landmark dictionary to array and extract metadata to masks
     landmarks_all, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_use = landmarks_to_array(
         landmark_coordinates, labels)
+    # Subtract origin
     landmarks_all -= origin
 
-    # Do not use labels that have never been marked
+    # Do not use landmarks that have never been marked in labels
     landmarks_use &= np.array([l in detected_labels for l in labels])
 
+    # Convert labels dict to array. This will result in a n_cam x n_times x n_landmarks x 2 array.
+    # n_times is sort(unique()) of all time bases
+    # If frame times between cameras do not align, the labels of respective other cameras will be nan
     landmark_imcoords, time_base = label_lib.to_numpy(landmark_labels, detected_frames, labels,
-                                                            time_bases=time_bases,
-                                                            label_identity=landmarks_identity)
+                                                      time_bases=time_bases,
+                                                      label_identity=landmarks_identity)
 
-    # Cut down to range actually filled with data
+    # Remove all timepoints in which all cameras are nan
     data_mask = np.any(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2))
     data_idxs = np.where(data_mask)[0]
-    landmark_imcoords = landmark_imcoords[:, data_idxs[0]:data_idxs[-1]+1]
-    time_base = time_base[data_idxs[0]:data_idxs[-1]+1]
+    landmark_imcoords = landmark_imcoords[:, data_idxs[0]:data_idxs[-1] + 1]
+    time_base = time_base[data_idxs[0]:data_idxs[-1] + 1]
 
     # Cut down to desired time range
     time_base_mask = np.logical_and(opts["time_range"][0] <= time_base, time_base <= opts["time_range"][1])
     landmark_imcoords = landmark_imcoords[:, time_base_mask]
     time_base = time_base[time_base_mask]
 
+    # Interpolate landmark image coordinates and vectors over timepoints of other, non-aligned cameras
     landmark_imcoords_orig = landmark_imcoords.copy()
-    # landmark_imcoords, time_base = interpolate_imcoords_rebase(landmark_imcoords_orig, time_base, calibs,
-    #                                                            1.01*np.median(np.diff(time_bases)), time_base,
-    #                                                            time_bases)
-    landmark_imcoords, time_base = interpolate_imcoords(landmark_imcoords_orig, time_base, calibs, time_bases)
+    # landmark_imcoords, landmark_vecs, time_base = interpolate_imcoords_rebase(landmark_imcoords_orig, time_base,
+    #                                                                           calibs,
+    #                                                                           1.01*np.median(np.diff(time_bases)),
+    #                                                                           time_base, time_bases)
+    landmark_imcoords, landmark_vecs, time_base = interpolate_imcoords(landmark_imcoords_orig, time_base, calibs,
+                                                                       time_bases)
 
-    # Cut down to points with sufficient landmarks
+    # Cut down to points with sufficient landmarks per opts["min_labels"]. Less than 4 is ill-defined
     sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) >= opts["min_labels"]
-
     time_base = time_base[sufficient_mask]
-    print(time_base[(0,-1),])
     landmark_imcoords = landmark_imcoords[:, sufficient_mask]
-    # landmark_imcoords[1] = np.nan
+    landmark_vecs = landmark_vecs[sufficient_mask]
 
-    # Optimize
-    # Reduce amount of steps for alternating updates
-    opts_optim = opts['optimization'].copy()
+    # ====== Section for in-place testing ======
+    # Change Jacobian
     # opts_optim["jac"] = viso.objfun_repro_jacobian_wrapper
-    opts_optim["jac"] = "2-point"
     # opts_optim["jac"] = "3-point"
 
-    landmarks_close_mean = np.nanmean(landmarks_all[~landmarks_far], axis=0)
-    landmarks_close_mean[2] += np.nanmean(
-        np.linalg.norm(landmarks_all[~landmarks_far]-landmarks_close_mean, axis=-1)
-    )*opts["lift_factor"]
-    if np.any(~landmarks_far) and not np.any(np.isnan(landmarks_close_mean)):
-        positions_opt = np.ones((len(time_base), 3)) * landmarks_close_mean
-    else:
-        positions_opt = None  # landmarks_real[np.newaxis, 1, ...].copy()
+    # Inject manual initialization
+    positions_opt = None
     oris_flu_opt = None
-    landmarks_opt = landmarks_all.copy()
-
     # positions_opt = np.array(len(time_base)*[[-0.269, 0.174, 1.177]])
     # oris_flu_opt = np.array(len(time_base)*[R.from_quat([-0.90288534, -0.06999111,  0.0519934, 0.42094654]).as_rotvec()])
-
+    landmarks_opt = landmarks_all.copy()
     landmarks_orig = landmarks_opt.copy()
+    # ====== /Section for in-place testing ======
 
-    # Only optimize p&o for far away landmarks.
-    if opts["far_first"]:
-        landmarks_mask = landmarks_use & landmarks_far
-        landmarks_opt_far, positions_opt, oris_flu_opt = \
-            viso.infer_position_attitude(time_base, landmark_imcoords[:, :, landmarks_mask], calibs,
-                                         opts_optim, opts,
-                                         landmarks_init=landmarks_opt[landmarks_mask],
-                                         positions_init=positions_opt,
-                                         oris_flu_init=oris_flu_opt,
-                                         optimize=[["positions", "oris"]],
-                                         landmarks_optimize=landmarks_optimize[landmarks_mask]
-                                         )
-        landmarks_opt[landmarks_mask] = landmarks_opt_far
-
-    # Only optimize p&o for close-by landmarks.
-    if opts["close_first"]:
-        landmarks_mask = landmarks_use & ~landmarks_far
-        landmarks_opt_mask, positions_opt, oris_flu_opt = \
-            viso.infer_position_attitude(time_base, landmark_imcoords[:, :, landmarks_mask], calibs,
-                                         opts_optim, opts,
-                                         landmarks_init=landmarks_opt[landmarks_mask],
-                                         positions_init=positions_opt,
-                                         oris_flu_init=oris_flu_opt,
-                                         optimize=[["positions", "oris"]],
-                                         landmarks_optimize=landmarks_optimize[landmarks_mask]
-                                         )
-        landmarks_opt[landmarks_mask] = landmarks_opt_mask
+    # # Only optimize p&o for far away landmarks.
+    # if opts["far_first"]:
+    #     landmarks_mask = landmarks_use & landmarks_far
+    #     landmarks_opt_far, positions_opt, oris_flu_opt = \
+    #         viso.infer_position_attitude(time_base, calibs, opts,
+    #                                      landmark_imcoords=landmark_imcoords[:, :, landmarks_mask],
+    #                                      landmark_vecs=landmark_vecs[:, landmarks_mask],
+    #                                      landmarks_init=landmarks_opt[landmarks_mask], positions_init=positions_opt,
+    #                                      landmarks_optimize=landmarks_optimize[landmarks_mask],
+    #                                      landmarks_far=landmarks_far[landmarks_mask])
+    #     landmarks_opt[landmarks_mask] = landmarks_opt_far
+    #
+    # # Only optimize p&o for close-by landmarks.
+    # if opts["close_first"]:
+    #     landmarks_mask = landmarks_use & ~landmarks_far
+    #     landmarks_opt_mask, positions_opt, oris_flu_opt = \
+    #         viso.infer_position_attitude(time_base, calibs, opts,
+    #                                      landmark_imcoords=landmark_imcoords[:, :, landmarks_mask],
+    #                                      landmark_vecs=landmark_vecs[:, landmarks_mask],
+    #                                      landmarks_init=landmarks_opt[landmarks_mask],
+    #                                      positions_init=positions_opt,
+    #                                      oris_flu_init=oris_flu_opt,
+    #                                      landmarks_optimize=landmarks_optimize[landmarks_mask],
+    #                                      landmarks_far=landmarks_far[landmarks_mask]
+    #                                      )
+    #     landmarks_opt[landmarks_mask] = landmarks_opt_mask
 
     # Optimize p&o, then p&o&l for all used landmarks
     landmarks_mask = landmarks_use
     landmarks_opt_mask, positions_opt, oris_flu_opt = \
-        viso.infer_position_attitude(time_base, landmark_imcoords[:, :, landmarks_mask], calibs,
-                                     opts_optim, opts,
+        viso.infer_position_attitude(time_base, calibs, opts,
+                                     landmark_imcoords=landmark_imcoords[:, :, landmarks_mask],
+                                     landmark_vecs=landmark_vecs[:, landmarks_mask],
                                      landmarks_init=landmarks_opt[landmarks_mask],
                                      positions_init=positions_opt,
                                      oris_flu_init=oris_flu_opt,
-                                     optimize=[["positions", "oris"],
-                                               ["positions", "oris", "landmarks"],
-                                               ["positions", "oris", "landmarks"],
-                                               ["positions", "oris", "landmarks"],
-                                               ["positions", "oris", "landmarks"]],
-                                     landmarks_optimize=landmarks_optimize[landmarks_mask]
+                                     landmarks_optimize=landmarks_optimize[landmarks_mask],
+                                     landmarks_far=landmarks_far[landmarks_mask]
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
 
     error_repro = viso.objfun_repro_runner(landmarks_opt[landmarks_mask], positions_opt,
-                                           oris_flu_opt, landmark_imcoords[:, :, landmarks_mask], calibs, opts)
-    error_repro[error_repro==0] = np.nan
+                                           oris_flu_opt, landmark_imcoords[:, :, landmarks_mask], calibs, opts["iterations"][-1])
+    error_repro[error_repro == 0] = np.nan
     print(f"Optimized repro cost: {0.5 * np.sum(error_repro ** 2)}")
 
     abserr = np.sqrt(np.sum(error_repro ** 2, axis=-1))
@@ -153,11 +148,4 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
 
     landmarks, positions, oris_flu = (landmarks_opt, positions_opt, oris_flu_opt)
 
-    if opts["realign_by_distant_features"]:
-        print("realign_by_distant_features")
-        oris_flu = realign_by_distant_features(landmarks_opt[landmarks_mask], landmark_imcoords[:, :, landmarks_mask],
-                                               time_base, positions, R.from_rotvec(oris_flu), calibs).as_rotvec()
-
     return landmarks, positions, oris_flu, time_base, landmark_imcoords, error_repro, labels
-
-

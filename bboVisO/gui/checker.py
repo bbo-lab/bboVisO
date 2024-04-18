@@ -52,13 +52,13 @@ class bboVisOchecker(QMainWindow):
 
         path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
 
-        viso_maxerrors_pd = pd.read_csv(path / f"maxerror.csv", sep="\t", header=None)
-        viso_maxerrors_pd = viso_maxerrors_pd.sort_values(viso_maxerrors_pd.columns[0], ascending=True)
-        self.viso_maxerrors = np.array(viso_maxerrors_pd[1]).T
+        viso_maxerrors_pd = pd.read_csv(path / f"maxerror.csv", sep="\t")
+        viso_maxerrors_pd.sort_values('t_us', ascending=True, inplace=True)
+        self.viso_maxerrors = np.array(viso_maxerrors_pd['error']).T
 
-        viso_errors_pd = pd.read_csv(path / f"error.csv", sep="\t", header=None)
-        viso_errors_pd = viso_errors_pd.sort_values(viso_errors_pd.columns[0], ascending=True)
-        self.viso_errors = np.array(viso_errors_pd).T
+        viso_errors_pd = pd.read_csv(path / f"error.csv", sep="\t")
+        viso_errors_pd.sort_values('t_us', ascending=True, inplace=True)
+        self.viso_errors = np.array(viso_errors_pd[viso_errors_pd.columns[1:]]).T
 
         viso_positions_pd = pd.read_csv(path / f"cam_positions.csv", sep="\t")
         self.viso_positions = np.array([
@@ -88,7 +88,7 @@ class bboVisOchecker(QMainWindow):
 
         self.check_mode = False
 
-        low_error_mask = self.viso_maxerrors < self.opts["interpolate_high_error"]
+        low_error_mask = self.viso_maxerrors < self.opts["checker"]["interpolate_high_error"]
         self.viso_positions_interp, self.viso_orientations_interp = helper.interpolate_mask(
             self.viso_times,
             self.viso_positions,
@@ -372,16 +372,19 @@ class bboVisOchecker(QMainWindow):
                 ori_flu = self.viso_orientations_interp[viso_idx]
                 print("Check mode")
 
+            # pos = np.array([16.805, -79.253, -3.318])
+            # ori_flu = R.from_quat([-0.467, 0.808, -0.290, 0.214])
+
             opts = get_opts()
             repro_error = objfun_repro_runner(
                 self.landmark_coords3d, pos[np.newaxis], ori_flu.as_rotvec()[np.newaxis],
                 self.landmark_imcoords[:, (self.time_idx,),],
-                self.calibs, opts
+                self.calibs, opts["iterations"][-1]
             )
             abserrors = np.sqrt(np.nansum(repro_error ** 2, axis=-1))
             abserrors[abserrors == 0] = np.nan
 
-            print("Max error:", self.viso_maxerrors[viso_idx])
+            print("Max error (odo):", self.viso_maxerrors[viso_idx])
             print("Max error:", np.nanmax(abserrors))
             print("Median error:", np.nanmedian(abserrors))
             print("Mean error:", np.nanmean(abserrors))

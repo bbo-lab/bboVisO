@@ -3,18 +3,19 @@ from calibcamlib import Camerasystem
 from scipy.interpolate import interp1d
 from scipy.spatial.transform import Slerp, Rotation as R
 
+
 def get_cam_time_bases(frame_idxs, cam_fps, cam_offsets, opts):
     offsets = (np.array(cam_offsets)).astype(np.uint64)
 
     cam_time_bases = []
     for fps, offset in zip(cam_fps, offsets):
         fps = float(fps)
-        offset_fr = offset*fps
+        offset_fr = offset * fps
         # Round frame offset if very close to integer
-        if offset_fr-np.round(offset_fr)<0.01:
+        if offset_fr - np.round(offset_fr) < 0.01:
             offset_fr = np.round(offset_fr)
 
-        cam_time_bases.append(((frame_idxs.astype(float) + offset_fr)/fps).astype(np.uint64))
+        cam_time_bases.append(((frame_idxs.astype(float) + offset_fr) / fps).astype(np.uint64))
 
     # Adjust time that are just off by 1us from float rounding, to not create an additional measurement
     for i_cam in range(1, len(cam_time_bases)):
@@ -80,7 +81,7 @@ def landmarks_to_array(landmark_coordinates, detected_labels):
 
 
 def interpolate_mask(time, pos, ori, mask):
-    if np.sum(mask)/len(mask)<0.25:
+    if np.sum(mask) / len(mask) < 0.25:
         return pos, ori
 
     pos_interp_f = [interp1d(time[mask], p, fill_value='extrapolate') for p in pos[mask].T]
@@ -120,22 +121,24 @@ def interpolate_imcoords(array_2d, array_time_base, calibs, sub_time_bases=None)
                        array_3d[:, 2:] * pretimes[:-1][np.newaxis, ..., np.newaxis, np.newaxis])
     array_3d_interp /= np.linalg.norm(array_3d_interp, axis=-1, keepdims=True)
 
-    # This changes array_3d in place, replacing only the values previously nan
+    # This changes array_3d IN PLACE!, replacing only the values previously nan
     array_3d_ireg = array_3d[:, 1:-1]
     for i_cam, sub_time_base_member in enumerate(sub_time_base_members):
         mask = np.isnan(array_3d_ireg)[i_cam] & (~sub_time_base_member[1:-1, np.newaxis, np.newaxis])
         array_3d_ireg[i_cam, mask] = array_3d_interp[i_cam, mask]
 
     # This has shape cam x cam x times x markers x coords
+    # TODO: The following project_dir ignores different perspectives from different cameras
     array_2d_interp = cs.project_dir(array_3d)
 
     # Replace only entries that were previously nan.
     array_2d_out = array_2d.copy()
     for i_cam in range(len(array_2d_out)):
-        array_2d_out[i_cam][np.isnan(array_2d_out[i_cam])] = array_2d_interp[i_cam, i_cam][np.isnan(array_2d_out[i_cam])]
+        array_2d_out[i_cam][np.isnan(array_2d_out[i_cam])] = array_2d_interp[i_cam, i_cam][
+            np.isnan(array_2d_out[i_cam])]
 
-
-    return array_2d_out, array_time_base
+    # TODO: The following nanmean ignores different perspectives from different cameras
+    return array_2d_out, np.nanmean(array_3d, axis=0), array_time_base
 
 
 def interpolate_imcoords_rebase(array_2d, array_time_base, calibs, dt, time_base=None):
@@ -150,24 +153,27 @@ def interpolate_imcoords_rebase(array_2d, array_time_base, calibs, dt, time_base
         array_3d_cam = array_3d_cam.transpose((1, 0, 2))
         for i_m, array_3d_cam_marker in enumerate(array_3d_cam):
             nan_mask = np.any(np.isnan(array_3d_cam_marker), axis=-1)
-            if np.sum(~nan_mask)<2:
+            if np.sum(~nan_mask) < 2:
                 continue
             no_nan_array_time_base = array_time_base[~nan_mask]
-            array_3d_cam_marker_if = [interp1d(array_time_base[~nan_mask], a, fill_value="extrapolate") for a in array_3d_cam_marker[~nan_mask].T]
+            array_3d_cam_marker_if = [interp1d(array_time_base[~nan_mask], a, fill_value="extrapolate") for a in
+                                      array_3d_cam_marker[~nan_mask].T]
             array_3d_cam_marker_i = np.array([i_f(time_base) for i_f in array_3d_cam_marker_if]).T
             array_3d_cam_marker_i[~generate_immediate_neighbor_mask(time_base, no_nan_array_time_base, dt)] = np.nan
             array_3d_interp[i_c, :, i_m] = array_3d_cam_marker_i
 
-
     array_2d_interp = cs.project_dir(array_3d_interp)
     array_2d_out = np.diagonal(array_2d_interp, axis1=0, axis2=1).transpose((3, 0, 1, 2))
 
-    return array_2d_out, time_base
+    return array_2d_out, array_3d_interp, time_base
+
 
 def generate_immediate_neighbor_mask(ts, neighbor_ts, max_dist):
     ts = ts.reshape((-1,))
-    neighbor_ts = neighbor_ts.reshape((-1,1))
-    return np.any((ts >= neighbor_ts - max_dist) & (ts <= neighbor_ts), axis=0) & np.any((ts <= neighbor_ts + max_dist) & (ts >= neighbor_ts), axis=0)
+    neighbor_ts = neighbor_ts.reshape((-1, 1))
+    return np.any((ts >= neighbor_ts - max_dist) & (ts <= neighbor_ts), axis=0) & np.any(
+        (ts <= neighbor_ts + max_dist) & (ts >= neighbor_ts), axis=0)
+
 
 def realign_by_distant_features(landmark_coords3d, imcoords, times, positions, orientations, calibs):
     orientations_filtered = orientations.as_quat()
@@ -180,19 +186,20 @@ def realign_by_distant_features(landmark_coords3d, imcoords, times, positions, o
         landmark_vec_mask = ~np.any(np.isnan(frame_landmark_vectors), axis=-1)
         cam_vec_mask = ~np.any(np.isnan(landmark_vecs[i_t]), axis=-1)
         common_mask = landmark_vec_mask & cam_vec_mask
-    
-        if np.sum(common_mask)<2:
+
+        if np.sum(common_mask) < 2:
             no_common += 1
             continue
-        
+
         landmark_dists[~common_mask] = np.nan
-        furthest_mask = landmark_dists[:,0]>=np.sort(landmark_dists[common_mask,0])[np.min((int(np.sum(common_mask)/2), np.sum(common_mask)-2))]
-    
+        furthest_mask = landmark_dists[:, 0] >= np.sort(landmark_dists[common_mask, 0])[
+            np.min((int(np.sum(common_mask) / 2), np.sum(common_mask) - 2))]
+
         align = R.align_vectors(
             frame_landmark_vectors[common_mask], landmark_vecs[i_t][common_mask]
         )[0]
         orientations_filtered[i_t] = align.as_quat()
-    print("Not optimized due to lack of common vectors: ",no_common,"/",len(times))
+    print("Not optimized due to lack of common vectors: ", no_common, "/", len(times))
     return R.from_quat(orientations_filtered)
 
 
@@ -202,3 +209,9 @@ def landmark_vecs_from_imcoords(landmark_imcoords, calibs):
     landmark_vecs /= np.linalg.norm(landmark_vecs, axis=-1, keepdims=True)  # Norm in case of averaging
     landmark_vecs[np.all(landmark_vecs == 0, axis=-1)] = np.nan
     return landmark_vecs
+
+
+def landmark_imcoords_from_vecs(landmark_vecs, calibs):
+    cs = Camerasystem.from_calibs(calibs)
+    landmark_imcoords = cs.project_dir(landmark_vecs)
+    return landmark_imcoords

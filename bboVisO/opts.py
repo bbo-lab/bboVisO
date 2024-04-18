@@ -1,35 +1,109 @@
 import sys
 
+
 def get_opts():
     return {
-        'optimization': {
-            'method': 'trf',
-            'ftol': 1e-6,
-            'xtol': 1e-6,
-            'gtol': 1e-8,
-            'x_scale': 'jac',
-            'loss': 'linear',
-            'tr_solver': 'lsmr',  # 'lsmr' is forced since jac_sparsity is also passed to least_squares function
-            'max_nfev': 500,
-            'verbose': 2,
-            'jac': '2-point',
-        },
-        'far_first': False,  # Optimize on only far landmarks first
-        'close_first': False,  # Optimize on only close landmarks first
-        'interpolate_high_error': 15,  # After a first optimization run, interpolate position and orientation of
-                                       #  high error frames as initialization for next optimization. Error is distance
-                                       #  between marked and reprojected point. Deactivate with -1
-        'interpolate_close_marker': 1e-3,  # After first optimization run, interpolate any position that is closer
-                                          # than this value to a labeled feature.
-                                          # Deactivate with -1
-        'time_range': [0, -1],
+        'iterations': [
+            {
+                'optimization': {
+                    'method': 'trf',
+                    'ftol': 1e-2,
+                    'xtol': 1e-6,
+                    'gtol': 1e-6,
+                    'x_scale': 'jac',
+                    'loss': 'linear',
+                    # 'tr_solver': 'lsmr' is forced since jac_sparsity is also passed to least_squares function
+                    'tr_solver': 'lsmr',
+                    'max_nfev': 500,
+                    'verbose': 2,
+                    'jac': '2-point',
+                },
+                'optimize': [["positions", "oris"],
+                             ["positions", "oris", "landmarks"]],
+                'objective_function': 'angular',
+                # 'far_first': Optimize on only far landmarks first
+                'far_first': False,
+                # 'close_first': Optimize on only close landmarks first
+                'close_first': False,
+                # 'interpolate_high_error': After a first optimization run, interpolate position and orientation of
+                #  high error frames as initialization for next optimization. Error is distance
+                #  between marked and reprojected point. Deactivate with -1
+                'interpolate_high_error': -1,
+                # 'interpolate_close_marker': After first optimization run, interpolate any position that is closer
+                # than this value to a labeled feature.
+                # Deactivate with -1
+                'interpolate_close_marker': -1,
+                # 'realign_by_distant_features': Realign camera with only further half of landmarks after optimization
+                'realign_by_distant_features': False,
+                # 'lm_close_pen_weight': penalty factor for positions close to landmarks (avoids positions falling
+                # exactly on landmarks)
+                'lm_close_pen_weight': 0 * 1e-1,
+                # In the last step, pass over the data, optimizing pos and ori for each frame
+                # individually
+                'optimize_single_frames': False,
+                # object stays in one position, only estimate single position + rotations
+                'single_position': False,
+                # initial positions are lifted up by this factor
+                'lift_factor': 0.0,
+                # Only process frames above 'max_error_median_factor'*median(error)
+                'max_error_median_factor': 0,
+            },
+            {
+                'optimization': {
+                    'method': 'trf',
+                    'ftol': 1e-6,
+                    'xtol': 1e-6,
+                    'gtol': 1e-8,
+                    'x_scale': 'jac',
+                    'loss': 'linear',
+                    # 'tr_solver': 'lsmr' is forced since jac_sparsity is also passed to least_squares function
+                    'tr_solver': 'lsmr',
+                    'max_nfev': 500,
+                    'verbose': 2,
+                    'jac': '2-point',
+                },
+                'optimize': [["positions", "oris"],
+                             ["positions", "oris", "landmarks"],
+                             ["positions", "oris", "landmarks"]],
+                'objective_function': 'repro',
+                # 'far_first': Optimize on only far landmarks first
+                'far_first': False,
+                # 'close_first': Optimize on only close landmarks first
+                'close_first': False,
+                # 'interpolate_high_error': After a first optimization run, interpolate position and orientation of
+                #  high error frames as initialization for next optimization. Error is distance
+                #  between marked and reprojected point. Deactivate with -1
+                'interpolate_high_error': 100,  # 15,
+                # 'interpolate_close_marker': After first optimization run, interpolate any position that is closer
+                # than this value to a labeled feature.
+                # Deactivate with -1
+                'interpolate_close_marker': -1,  # 1e-3,
+                # 'realign_by_distant_features': Realign camera with only further half of landmarks after optimization
+                'realign_by_distant_features': False,
+                # 'lm_close_pen_weight': penalty factor for positions close to landmarks (avoids positions falling
+                # exactly on landmarks)
+                'lm_close_pen_weight': 1e-1,
+                # In the last step, pass over the data, optimizing pos and ori for each frame
+                # individually
+                'optimize_single_frames': False,
+                # object stays in one position, only estimate single position + rotations
+                'single_position': False,
+                # initial positions are lifted up by this factor
+                'lift_factor': 0,
+                # Only process frames above 'max_error_median_factor'*median(error)
+                'max_error_median_factor': 0,
+            },
+        ],
+        'time_range': [-sys.maxsize, sys.maxsize],
         'min_labels': 4,  # Require min_labels detected per frame
         'single_position': False,  # object stays in one position, only estimate single position + rotations
-        'time_dtype': float,  # Data type of time output. Mostly for resetting within custom importers, e.g. with µs
+        'time_dtype': float,
+        # Data type of time output. Mostly for resetting within custom importers, e.g. with µs
         'add_offset': [],  # Add an offset to time, for subframe alignment
-        'realign_by_distant_features': False,  # Realign camera with only further half of landmarks after optimization
         'jax_backend': 'cpu',
-        'lift_factor': 0.5,  # initial positions are lifted up by this factor
-        'lm_close_pen_weight': 0*1e-1     # penalty factor for positions close to landmarks (avoids positions falling
-                                        # exactly on landmarks)
+        # Options specific to the checker
+        'checker': {
+            # Interpolation threshold for check mode ()
+            'interpolate_high_error': 100,
+        }
     }
