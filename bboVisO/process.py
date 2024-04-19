@@ -13,7 +13,7 @@ from bboVisO.helper import (landmarks_to_array, interpolate_imcoords_rebase, int
 from bbo import label_lib
 
 # single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!
-jax.config.update("jax_enable_x64", True)
+# jax.config.update("jax_enable_x64", True)
 
 # Some debug output
 viso.debug = True

@@ -1,4 +1,3 @@
-import jax.config
 import numpy as np
 import os.path
 import argparse
@@ -20,7 +19,7 @@ from bboVisO.output import save_to_text
 from bboVisO.visualisation import plot_frames
 
 # single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!
-jax.config.update("jax_enable_x64", True)
+# jax.config.update("jax_enable_x64", True)
 
 
 def main():
@@ -58,7 +57,7 @@ def main():
         viso.debug = True
     opts = bboVisO.opts.get_opts()
 
-    jax.config.update('jax_platform_name', opts['jax_backend'])
+    # jax.config.update('jax_platform_name', opts['jax_backend'])
 
     opts["img_out_n"] = args.img_out_n[0]
 

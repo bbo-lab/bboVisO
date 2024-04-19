@@ -35,7 +35,6 @@ def infer_position_attitude(times, calibs, opts,
     # Iterate through optimization types
     for i_iter, iter_opts in enumerate(opts["iterations"]):
         # Iterate through opimization steps
-        opts_orig = deepcopy(iter_opts)
         for i_opti, opt in enumerate(iter_opts["optimize"]):
             if (iter_opts["interpolate_high_error"] and iter_opts["interpolate_high_error"] != -1
                     and positions_init is not None) and oris_flu_init is not None:
@@ -276,9 +275,6 @@ def objfun_angular_runner(landmarks, positions, oris_flu, landmark_vecs, opts) -
 
 def objfun_angular_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
     landmarks, positions, oris_flu, landmark_vecs, lm_close_pen_weight = unravel_vars_angular(free_vars, args)
-
-    viso_ag.objfun_angular(landmarks, positions, oris_flu,
-                                       landmark_vecs, lm_close_pen_weight)
 
     errors_angular = np.array(args['precalc']['objfunc_angular'](landmarks, positions, oris_flu,
                                                         landmark_vecs, lm_close_pen_weight))
@@ -556,6 +552,7 @@ def get_precalc(opts):
     global precalc_lazy
 
     if precalc_lazy is None:
+        print(opts["jax_backend"])
         precalc_lazy = {
             'objfunc_repro': jit(viso_ag.objfun_repro, backend=opts["jax_backend"]),
             'jacobians_repro': [jit(jacobian(viso_ag.objfun_repro, i_var), backend=opts["jax_backend"])
@@ -694,34 +691,45 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
     abserrors = np.sqrt(np.nansum(objfun_error ** 2, axis=-1))
     abserrors[abserrors == 0] = np.nan
 
-    frame_errors = np.nanmax(abserrors, axis=-1)
-    low_error_mask = frame_errors < opts['interpolate_high_error']
+    frame_errors_max = np.nanmax(abserrors, axis=-1)
+    frame_errors_median = np.nanmedian(abserrors, axis=-1)
+    low_error_mask = frame_errors_max < opts['interpolate_high_error']
+    low_error_mask[(0, -1),] = True  # We never want extrapolation
     #
     # if np.sum(~low_error_mask)/len(low_error_mask)>0.7:
     #     print("Too many high max errors, reverting to median error.")
     #     frame_errors = np.nanmedian(abserrors, axis=-1)
     #     low_error_mask = frame_errors < opts['interpolate_high_error']
 
-    print(f"High error - Interpolated times ({np.sum(~low_error_mask)}/{low_error_mask.shape[0]}): ",
-          ", ".join([str(n) for n in times[~low_error_mask]]))
-
     if (np.sum(~low_error_mask) / low_error_mask.shape[0]) > 0.95:
         print("Too many high median errors, not interpolating.")
         return positions, oris_flu
 
     positions_interp, oris_flu_interp = interpolate_mask(times, positions, R.from_rotvec(oris_flu), low_error_mask)
+    oris_flu_interp = oris_flu_interp.as_rotvec()
 
     objfun_error_interp = objfun_repro_runner(
-        landmarks, positions_interp, oris_flu_interp.as_rotvec(), landmark_imcoords, calibs, opts
+        landmarks, positions_interp, oris_flu_interp, landmark_imcoords, calibs, opts
     )
     abserrors_interp = np.sqrt(np.nansum(objfun_error_interp ** 2, axis=-1))
     abserrors_interp[abserrors_interp == 0] = np.nan
-    frame_errors_interp = np.nanmedian(abserrors_interp, axis=-1)
-    low_error_mask_interp = frame_errors_interp < opts['interpolate_high_error']
-    print(f"High error - left ({np.sum(~low_error_mask_interp)}/{low_error_mask_interp.shape[0]}): ",
-          ", ".join([str(n) for n in times[~low_error_mask_interp]]))
+    frame_errors_max_interp = np.nanmax(abserrors_interp, axis=-1)
+    frame_errors_median_interp = np.nanmedian(abserrors_interp, axis=-1)
+    low_error_mask_interp = frame_errors_max_interp < opts['interpolate_high_error']
 
-    return positions_interp, oris_flu_interp.as_rotvec()
+    # We never want to make the max or median error worse
+    worse_mask = (
+            (frame_errors_median_interp > frame_errors_median) &
+            (frame_errors_max_interp > frame_errors_max))
+    positions_interp[worse_mask] = positions[worse_mask]
+    oris_flu_interp[worse_mask] = oris_flu[worse_mask]
+
+    print(f"High error")
+    print(f"Interpolated frames ({np.sum(~low_error_mask)}/{low_error_mask.shape[0]})")
+    print(f"Replaced frames     ({np.sum((~low_error_mask) & (~worse_mask))}/{low_error_mask.shape[0]})")
+    print(f"Left hi_err frames  ({np.sum(~low_error_mask_interp)}/{low_error_mask.shape[0]})")
+
+    return positions_interp, oris_flu_interp
 
 
 def interpolate_close_marker(times, positions, oris_flu, landmarks, opts):

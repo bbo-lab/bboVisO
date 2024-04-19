@@ -46,7 +46,8 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
         # Remove previous output
         mask = (old_pd_table["t_us"] < opts["time_range"][0]) | (old_pd_table["t_us"] > opts["time_range"][-1])
         old_pd_table = old_pd_table[mask]
-        df = pd.concat((df, old_pd_table))
+        if np.any(mask):
+            df = pd.concat((df, old_pd_table))
     df.set_index("t_us", inplace=True)
     df.sort_values(by="t_us", inplace=True)
     df.to_csv(csv_file, sep='\t', index=True, header=list(df.columns))
@@ -68,7 +69,8 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
         # Remove previous output
         mask = (old_pd_table["t_us"] < opts["time_range"][0]) | (old_pd_table["t_us"] > opts["time_range"][-1])
         old_pd_table = old_pd_table[mask]
-        df = pd.concat((df, old_pd_table))
+        if np.any(mask):
+            df = pd.concat((df, old_pd_table))
     df.set_index("t_us", inplace=True)
     df.sort_values(by="t_us", inplace=True)
     df.to_csv(csv_file, sep='\t', index=True, header=list(df.columns))
@@ -86,7 +88,8 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
             # Remove previous output
             mask = (old_pd_table["t_us"] < opts["time_range"][0]) | (old_pd_table["t_us"] > opts["time_range"][-1])
             old_pd_table = old_pd_table[mask]
-            df = pd.concat((df, old_pd_table))
+            if np.any(mask):
+                df = pd.concat((df, old_pd_table))
         df.set_index("t_us", inplace=True)
         df.sort_values(by="error", inplace=True, ascending=False)
         df.to_csv(csv_file, sep='\t', index=True, header=list(df.columns))
