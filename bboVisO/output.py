@@ -16,7 +16,7 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
 
     # Positions
     csv_file = path_base / "cam_positions.csv"
-    data = np.round(positions.T, decimals=3)
+    data = np.round(positions.T, decimals=8)
     df = pd.DataFrame()
     df['t_us'] = time_base
     df['x0'] = data[0]
@@ -34,7 +34,7 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
 
     # Orientations
     csv_file = path_base / "cam_orientations.csv"
-    data = np.round(R.from_rotvec(oris_flu).as_quat(canonical=True).T, decimals=3)
+    data = R.from_rotvec(oris_flu).as_quat(canonical=True).T
     df = pd.DataFrame()
     df['t_us'] = time_base
     df['x0'] = data[0]

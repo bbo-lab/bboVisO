@@ -26,11 +26,17 @@ def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices
     landmark_coords = camfuncs_ag.to_ideal_plane(landmark_coords)
     landmark_coords = camfuncs_ag.distort(landmark_coords, ks)
     landmark_coords = camfuncs_ag.ideal_to_sensor(landmark_coords, cam_matrices)
+    #
+    # print("Repro landmark_coords: ",landmark_coords)
+    # print("Repro landmark_imcoords: ", landmark_imcoords)
 
-    errors2d = landmark_coords - landmark_imcoords
+    errors2d = np.abs(landmark_coords - landmark_imcoords)
+
+    # print("Repro errors2d: ", errors2d)
 
     # We lightly penalize positions too close to landmarks
     penalty = lm_close_pen_weight * calc_lm_close_penalty(landmarks, positions)
+    # print("penalty: ", penalty)
     errors2d += penalty[np.newaxis, :, np.newaxis, np.newaxis]
 
     return errors2d

@@ -81,7 +81,7 @@ def landmarks_to_array(landmark_coordinates, detected_labels):
 
 
 def interpolate_mask(time, pos, ori, mask):
-    if np.sum(mask) / len(mask) < 0.25:
+    if np.sum(mask) / len(mask) < 0.25 or np.sum(mask) == 1:
         return pos, ori
 
     pos_interp_f = [interp1d(time[mask], p, fill_value='extrapolate') for p in pos[mask].T]

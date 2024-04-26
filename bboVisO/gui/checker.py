@@ -96,8 +96,11 @@ class bboVisOchecker(QMainWindow):
             low_error_mask
         )
 
+        landmark_data = data["landmark_coordinates"]
+        landmarks_identity = helper.landmarks_to_array(landmark_data, self.landmark_labels)[2]
+
         label_data = label_lib.load(data["labels"])
-        self.landmark_frames = label_lib.get_labeled_frame_idxs(label_data)
+        self.landmark_frames = label_lib.get_labeled_frame_idxs(label_data, label_set=self.landmark_labels)
         # self.landmark_labels = sorted(label_lib.get_labels(label_data))
         # detected_labels = [d for d in detected_labels if d in self.landmark_labels]
 
@@ -107,18 +110,13 @@ class bboVisOchecker(QMainWindow):
             self.cam_time_bases = helper.get_cam_time_bases(self.landmark_frames, data["cam_fps"], data["cam_offsets"],
                                                             self.opts)
 
-        landmark_data = data["landmark_coordinates"]
-        landmarks_identity = helper.landmarks_to_array(landmark_data, self.landmark_labels)[2]
-
         self.landmark_imcoords, self.times = label_lib.to_numpy(label_data, self.landmark_frames, self.landmark_labels,
                                                                 time_bases=self.cam_time_bases,
                                                                 label_identity=landmarks_identity)
 
-        dt = np.median(np.diff(self.cam_time_bases))
-        self.landmark_imcoords = helper.interpolate_imcoords_rebase(self.landmark_imcoords, self.times, self.calibs,
-                                                                    0.999 * dt, self.times)[0]
-        # self.landmark_imcoords, self.times = helper.interpolate_imcoords(self.landmark_imcoords, self.times,
-        #                                                                         calibs)
+        self.landmark_imcoords = helper.interpolate_imcoords(self.landmark_imcoords, self.times, self.calibs,
+                                                                           self.cam_time_bases)[0]
+        # self.landmark_imcoords[1] = np.nan
 
         self.time_idx = 0
         self.cam_idx = 0
@@ -395,7 +393,11 @@ class bboVisOchecker(QMainWindow):
 
             rel_points = ori_flu.inv().apply(self.landmark_coords3d - pos)
 
+            self.camera_system = Camerasystem.from_calibs(self.calibs)
             imcoords_proj = self.camera_system.project(rel_points)[self.cam_idx]
+            print("Cameralib: ", imcoords_proj)
+            print("Labels: ", imcoords)
+
             imcoords_proj[np.isnan(imcoords)] = np.nan
 
             ax.plot(*imcoords_proj.T, 'bx')

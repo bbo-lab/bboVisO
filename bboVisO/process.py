@@ -27,7 +27,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     origin = np.array(landmark_coordinates["origin"]["position"])
 
     # Frames with labels
-    detected_frames = label_lib.get_labeled_frame_idxs(landmark_labels)
+    detected_frames = label_lib.get_labeled_frame_idxs(landmark_labels, label_set=labels)
     print(len(detected_frames))
 
     # Marked labels
@@ -72,6 +72,8 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     #                                                                           time_base, time_bases)
     landmark_imcoords, landmark_vecs, time_base = interpolate_imcoords(landmark_imcoords_orig, time_base, calibs,
                                                                        time_bases)
+
+    # landmark_imcoords[0] = np.nan
 
     # Cut down to points with sufficient landmarks per opts["min_labels"]. Less than 4 is ill-defined
     sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) >= opts["min_labels"]

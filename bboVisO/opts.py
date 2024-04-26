@@ -125,7 +125,7 @@ def get_opts():
                 'realign_by_distant_features': False,
                 # 'lm_close_pen_weight': penalty factor for positions close to landmarks (avoids positions falling
                 # exactly on landmarks)
-                'lm_close_pen_weight': 1e-1,
+                'lm_close_pen_weight': 0*1e-2,
                 # In the last step, pass over the data, optimizing pos and ori for each frame
                 # individually
                 'optimize_single_frames': False,
