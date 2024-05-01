@@ -42,13 +42,14 @@ def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices
     return errors2d
 
 
-def objfun_angular(landmarks, positions, oris_flu, landmark_vecs, lm_close_pen_weight, debug=False):
-    pl_vecs = landmarks[np.newaxis] - positions[:, np.newaxis]
+def objfun_angular(landmarks, positions, oris_flu, landmark_vecs, cam_positions, lm_close_pen_weight, debug=False):
+    cam_frame_positions = cam_positions[:,np.newaxis] + positions[np.newaxis]
+    pl_vecs = landmarks[np.newaxis, np.newaxis] - cam_frame_positions[:, :, np.newaxis]
     pl_vecs /= np.linalg.norm(pl_vecs, axis=-1, keepdims=True)
 
     # errors_ang = 1 - np.sum(pl_vecs * np.einsum('nij,nmj->nmi', rodrigues_as_rotmats(oris_flu), landmark_vecs), axis=-1)
     errors_ang = np.arccos(
-        np.sum(pl_vecs * np.einsum('nij,nmj->nmi', rodrigues_as_rotmats(oris_flu), landmark_vecs), axis=-1))
+        np.sum(pl_vecs * np.einsum('nij,lnmj->lnmi', rodrigues_as_rotmats(oris_flu), landmark_vecs), axis=-1))
 
     # We lightly penalize positions too close to landmarks
     penalty = np.zeros(len(positions))  # lm_close_pen_weight * calc_lm_close_penalty(landmarks, positions)

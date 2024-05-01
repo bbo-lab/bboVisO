@@ -96,7 +96,7 @@ def infer_position_attitude(times, calibs, opts,
                                                                   landmarks_far=landmarks_far,
                                                                   precalc=precalc,
                                                                   landmark_imcoords=landmark_imcoords[:, error_mask],
-                                                                  landmark_vecs=landmark_vecs[error_mask])
+                                                                  landmark_vecs=landmark_vecs[:, error_mask])
 
             min_result: OptimizeResult = least_squares(objective_function(iter_opts),
                                                        vars_free,
@@ -134,7 +134,7 @@ def infer_position_attitude(times, calibs, opts,
                                                                       landmarks_far=landmarks_far,
                                                                       precalc=precalc,
                                                                       landmark_imcoords=landmark_imcoords[:, (i_fr,), ],
-                                                                      landmark_vecs=landmark_vecs[(i_fr,),])
+                                                                      landmark_vecs=landmark_vecs[:, (i_fr,),])
 
                 min_result: OptimizeResult = least_squares(objective_function(iter_opts),
                                                            vars_free,
@@ -267,23 +267,23 @@ def objfun_repro_jacobian_wrapper(free_vars, args) -> np.ndarray:
 
 def objfun_angular_runner(landmarks, positions, oris_flu, landmark_vecs, opts) -> np.ndarray:
     errors2d = viso_ag.objfun_angular(landmarks, positions, oris_flu,
-                                      landmark_vecs,
+                                      landmark_vecs, opts["camera_positions"],
                                       opts["lm_close_pen_weight"], True)
 
     return np.nansum(errors2d, axis=0)
 
 
 def objfun_angular_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
-    landmarks, positions, oris_flu, landmark_vecs, lm_close_pen_weight = unravel_vars_angular(free_vars, args)
+    landmarks, positions, oris_flu, landmark_vecs, cam_ts, lm_close_pen_weight = unravel_vars_angular(free_vars, args)
 
     errors_angular = np.array(args['precalc']['objfunc_angular'](landmarks, positions, oris_flu,
-                                                        landmark_vecs, lm_close_pen_weight))
+                                                        landmark_vecs, args["camera_positions"], lm_close_pen_weight))
 
     if no_ravel:
-        return errors_angular
+        return np.nansum(errors_angular, axis=0)
     else:
         errors_angular[np.isnan(errors_angular)] = 0
-        return errors_angular.ravel()
+        return np.nansum(errors_angular, axis=0).ravel()
 
 
 def objfun_angular_jacobian_wrapper(free_vars, args) -> np.ndarray:
@@ -370,8 +370,10 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
                             oris_flu,
                             optimize=optimize, landmarks_optimize=landmarks_optimize, landmarks_far=landmarks_far)
 
-    k = landmark_vecs.shape[0]
-    n = landmark_vecs.shape[1]
+    k = landmark_vecs.shape[1]
+    n = landmark_vecs.shape[2]
+
+    t_c2w = np.array([R.from_rotvec(c["rvec_cam"]).apply(-c["tvec_cam"]) for c in calibs])
 
     obfun_args = {
         'vars_full': vars_full,  # All possible vars, free vars will be substituted in _free wrapper functions
@@ -380,6 +382,7 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
         'landmark_vecs': landmark_vecs,
         'single_position': opts["single_position"],
         'calibs': calibs,
+        'camera_positions': t_c2w,
         'lm_close_pen_weight': opts["lm_close_pen_weight"],
         'precalc': get_precalc(opts) if precalc is None else precalc
     }
@@ -411,8 +414,10 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
     if optimize is None:
         optimize = ["landmarks", "positions", "oris"]
 
-    k = landmark_vectors.shape[0]
-    n = landmark_vectors.shape[1]
+    k = landmark_vectors.shape[1]
+    n = landmark_vectors.shape[2]
+
+    landmark_vectors_sphere = np.nanmean(landmark_vectors, axis=0)
 
     if opts["single_position"]:
         k_p = 1
@@ -420,9 +425,9 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
         k_p = k
 
     edges = np.array([0,
-                      n * 3,
-                      n * 3 + k_p * 3,
-                      n * 3 + k_p * 3 + k * 3
+                      n * 3,    # End landmarks
+                      n * 3 + k_p * 3,  # End positions
+                      n * 3 + k_p * 3 + k * 3  # End orientations
                       ])
 
     vars_full = np.full(edges[-1], np.nan)
@@ -439,7 +444,7 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
         landmarks_init = landmarks
     else:
         # Initialize to a distance of 100m into the direction of the  respective camera vectors
-        landmarks_init = build_vector_bundle(landmark_vectors[0], landmark_vectors[1:]) * 100
+        landmarks_init = build_vector_bundle(landmark_vectors_sphere[0], landmark_vectors_sphere[1:]) * 100
 
     if positions is not None:
         positions_init = positions  # TODO: Implement single position
@@ -472,17 +477,17 @@ def make_initialization(landmark_vectors, calibs, opts, landmarks=None, position
             frame_landmark_vectors = landmarks_init - positions_init[i]
             frame_landmark_vectors /= np.linalg.norm(frame_landmark_vectors, axis=-1, keepdims=True)
             landmark_vec_mask = ~np.any(np.isnan(frame_landmark_vectors), axis=-1)
-            cam_vec_mask = ~np.any(np.isnan(landmark_vectors[i]), axis=-1)
+            cam_vec_mask = ~np.any(np.isnan(landmark_vectors_sphere[i]), axis=-1)
             common_mask = landmark_vec_mask & cam_vec_mask
 
             oris_flu_init[i] = R.align_vectors(
-                frame_landmark_vectors[common_mask], landmark_vectors[i][common_mask]
+                frame_landmark_vectors[common_mask], landmark_vectors_sphere[i][common_mask]
             )[0].as_rotvec()
 
     # Fill nan landmarks as good as possible
     for lm_idx, lm in enumerate(landmarks_init):
         if np.any(np.isnan(lm)):
-            lm[:] = intersect(positions_init, landmark_vectors[:, lm_idx])
+            lm[:] = intersect(positions_init, landmark_vectors_sphere[:, lm_idx])
 
     if opts["single_position"]:
         positions_init = positions_init[(0,),]
@@ -557,7 +562,7 @@ def get_precalc(opts):
             'objfunc_repro': jit(viso_ag.objfun_repro, backend=opts["jax_backend"]),
             'jacobians_repro': [jit(jacobian(viso_ag.objfun_repro, i_var), backend=opts["jax_backend"])
                                 for i_var in range(3)],
-            'objfunc_angular': jit(viso_ag.objfun_angular, backend=opts["jax_backend"]),
+            'objfunc_angular': viso_ag.objfun_angular,  # jit(viso_ag.objfun_angular, backend=opts["jax_backend"]),
             'jacobians_angular': [jit(jacobian(viso_ag.objfun_angular, i_var), backend=opts["jax_backend"])
                                   for i_var in range(3)],
             # 'objfunc_3d': jit(viso_ag.objfun_3d, backend=opts["jax_backend"]),
@@ -580,9 +585,10 @@ def unravel_vars_repro(free_vars, args):
 def unravel_vars_angular(free_vars, args):
     landmark_vecs = args["landmark_vecs"]
     lm_close_pen_weight = args["lm_close_pen_weight"]
+    cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(args["calibs"])
 
     landmarks, positions, oris_flu = unravel_vars(free_vars, args)
-    return landmarks, positions, oris_flu, landmark_vecs, lm_close_pen_weight
+    return landmarks, positions, oris_flu, landmark_vecs, cam_ts, lm_close_pen_weight
 
 
 def unravel_vars(free_vars, args):
@@ -592,8 +598,8 @@ def unravel_vars(free_vars, args):
     vars_full = args["vars_full"].copy()
     vars_full[args["mask_opt"]] = free_vars
     if landmark_vecs is not None:
-        k = landmark_vecs.shape[0]
-        n = landmark_vecs.shape[1]
+        k = landmark_vecs.shape[1]
+        n = landmark_vecs.shape[2]
     elif landmark_imcoords is not None:
         k = landmark_imcoords.shape[1]
         n = landmark_imcoords.shape[2]

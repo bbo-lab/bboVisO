@@ -79,7 +79,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) >= opts["min_labels"]
     time_base = time_base[sufficient_mask]
     landmark_imcoords = landmark_imcoords[:, sufficient_mask]
-    landmark_vecs = landmark_vecs[sufficient_mask]
+    landmark_vecs = landmark_vecs[:, sufficient_mask]
 
     # ====== Section for in-place testing ======
     # Change Jacobian
@@ -127,7 +127,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     landmarks_opt_mask, positions_opt, oris_flu_opt = \
         viso.infer_position_attitude(time_base, calibs, opts,
                                      landmark_imcoords=landmark_imcoords[:, :, landmarks_mask],
-                                     landmark_vecs=landmark_vecs[:, landmarks_mask],
+                                     landmark_vecs=landmark_vecs[:,:, landmarks_mask],
                                      landmarks_init=landmarks_opt[landmarks_mask],
                                      positions_init=positions_opt,
                                      oris_flu_init=oris_flu_opt,

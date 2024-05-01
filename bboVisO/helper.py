@@ -129,7 +129,7 @@ def interpolate_imcoords(array_2d, array_time_base, calibs, sub_time_bases=None)
 
     # This has shape cam x cam x times x markers x coords
     # TODO: The following project_dir ignores different perspectives from different cameras
-    array_2d_interp = cs.project_dir(array_3d)
+    array_2d_interp = cs.project(array_3d)
 
     # Replace only entries that were previously nan.
     array_2d_out = array_2d.copy()
@@ -138,7 +138,7 @@ def interpolate_imcoords(array_2d, array_time_base, calibs, sub_time_bases=None)
             np.isnan(array_2d_out[i_cam])]
 
     # TODO: The following nanmean ignores different perspectives from different cameras
-    return array_2d_out, np.nanmean(array_3d, axis=0), array_time_base
+    return array_2d_out, array_3d, array_time_base
 
 
 def interpolate_imcoords_rebase(array_2d, array_time_base, calibs, dt, time_base=None):
@@ -205,7 +205,7 @@ def realign_by_distant_features(landmark_coords3d, imcoords, times, positions, o
 
 def landmark_vecs_from_imcoords(landmark_imcoords, calibs):
     cs = Camerasystem.from_calibs(calibs)
-    landmark_vecs = np.nanmean(cs.get_camera_lines(landmark_imcoords)[0], axis=0)
+    landmark_vecs = cs.get_camera_lines(landmark_imcoords)[0]
     landmark_vecs /= np.linalg.norm(landmark_vecs, axis=-1, keepdims=True)  # Norm in case of averaging
     landmark_vecs[np.all(landmark_vecs == 0, axis=-1)] = np.nan
     return landmark_vecs
@@ -213,5 +213,6 @@ def landmark_vecs_from_imcoords(landmark_imcoords, calibs):
 
 def landmark_imcoords_from_vecs(landmark_vecs, calibs):
     cs = Camerasystem.from_calibs(calibs)
+    raise Exception("This needs to be reimplemented taking into account camera positions")
     landmark_imcoords = cs.project_dir(landmark_vecs)
     return landmark_imcoords

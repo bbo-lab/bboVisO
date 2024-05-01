@@ -119,7 +119,7 @@ def main():
                               zip(cam_time_bases, opts["add_offset"])]
 
             # Load calibration
-            calibs = calibcamlib.Camerasystem.load_dict(calibration.as_posix())
+            calibs = calibcamlib.Camerasystem.load_dict(calibration.as_posix())["calibs"]
 
             # Run odometry
             landmarks, positions, oris, res_time_base, landmark_imcoords, error_repro, landmark_labels = \
