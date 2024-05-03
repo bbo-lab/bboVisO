@@ -13,8 +13,9 @@ from scipy.spatial.transform import Rotation as R
 from pathlib import Path
 from svidreader import get_reader
 
+import bboVisO.interpolation
 from bboVisO.opts import get_opts
-from bboVisO.viso import objfun_repro_runner
+from bboVisO.viso_repro import objfun_repro_runner
 from calibcamlib import Camerasystem
 
 from bboVisO import helper
@@ -89,7 +90,7 @@ class bboVisOchecker(QMainWindow):
         self.check_mode = False
 
         low_error_mask = self.viso_maxerrors < self.opts["checker"]["interpolate_high_error"]
-        self.viso_positions_interp, self.viso_orientations_interp = helper.interpolate_mask(
+        self.viso_positions_interp, self.viso_orientations_interp = bboVisO.interpolation.interpolate_mask(
             self.viso_times,
             self.viso_positions,
             self.viso_orientations,
@@ -114,8 +115,8 @@ class bboVisOchecker(QMainWindow):
                                                                 time_bases=self.cam_time_bases,
                                                                 label_identity=landmarks_identity)
 
-        self.landmark_imcoords = helper.interpolate_imcoords(self.landmark_imcoords, self.times, self.calibs,
-                                                                           self.cam_time_bases)[0]
+        self.landmark_imcoords = bboVisO.interpolation.interpolate_imcoords(self.landmark_imcoords, self.times, self.calibs,
+                                                                            self.cam_time_bases)[0]
         # self.landmark_imcoords[1] = np.nan
 
         self.time_idx = 0

@@ -5,10 +5,11 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 import bboVisO.viso as viso
+import bboVisO.viso_repro
 from bboVisO import opts
 
-from bboVisO.helper import (landmarks_to_array, interpolate_imcoords_rebase, interpolate_imcoords,
-                            realign_by_distant_features)
+from bboVisO.helper import (landmarks_to_array, realign_by_distant_features)
+from bboVisO.interpolation import interpolate_imcoords, interpolate_imcoords_rebase
 
 from bbo import label_lib
 
@@ -124,7 +125,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
 
     # Optimize p&o, then p&o&l for all used landmarks
     landmarks_mask = landmarks_use
-    landmarks_opt_mask, positions_opt, oris_flu_opt = \
+    landmarks_opt_mask, positions_opt, oris_flu_opt, calibs = \
         viso.infer_position_attitude(time_base, calibs, opts,
                                      landmark_imcoords=landmark_imcoords[:, :, landmarks_mask],
                                      landmark_vecs=landmark_vecs[:,:, landmarks_mask],
@@ -136,8 +137,8 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
 
-    error_repro = viso.objfun_repro_runner(landmarks_opt[landmarks_mask], positions_opt,
-                                           oris_flu_opt, landmark_imcoords[:, :, landmarks_mask], calibs, opts["iterations"][-1])
+    error_repro = bboVisO.viso_repro.objfun_repro_runner(landmarks_opt[landmarks_mask], positions_opt,
+                                                         oris_flu_opt, landmark_imcoords[:, :, landmarks_mask], calibs, opts["iterations"][-1])
     error_repro[error_repro == 0] = np.nan
     print(f"Optimized repro cost: {0.5 * np.sum(error_repro ** 2)}")
 

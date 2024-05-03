@@ -1,4 +1,7 @@
 import unittest
+
+import bboVisO.initialization
+import bboVisO.viso_3derr
 from .viso_test_case import VisOTestCase
 import os
 
@@ -19,10 +22,10 @@ class TestObjfun3DClass(VisOTestCase):
         np.testing.assert_allclose(np.zeros_like(error), error, rtol=1e-10, atol=1e-10)
 
     def test_opt_objfun_wrapper_3d(self):
-        vars_free_opt, args_opt = viso.make_optim_input(self.calibs, self.opts, self.landmarks, self.positions,
-                                                        self.oris_flu.as_rotvec(),
-                                                        landmark_vecs=self.landmark_vecs)[:2]
-        error = viso.objfun_3d_wrapper(vars_free_opt, args_opt)
+        vars_free_opt, args_opt = bboVisO.initialization.make_optim_input(self.calibs, self.opts, self.landmarks, self.positions,
+                                                                          self.oris_flu.as_rotvec(),
+                                                                          landmark_vecs=self.landmark_vecs)[:2]
+        error = bboVisO.viso_3derr.objfun_3d_wrapper(vars_free_opt, args_opt)
 
         print(f"Max error value for ground truth: {np.max(np.abs(error))}")
         np.testing.assert_allclose(np.zeros_like(error), error, rtol=1e-10, atol=1e-10)
@@ -39,9 +42,9 @@ class TestObjfun3DClass(VisOTestCase):
             error = viso_ag.objfun_3d(landmarks_rand, positions_rand, oris_flu_rand, landmark_vecs_rand)
 
             # Calculate objective function through wrapper
-            vars_free, args = viso.make_optim_input(self.calibs, self.opts, landmarks_rand, positions_rand,
-                                                    oris_flu_rand, landmark_vecs=landmark_vecs_rand)[:2]
-            error_wrapper = viso.objfun_3d_wrapper(vars_free, args).reshape(error.shape)
+            vars_free, args = bboVisO.initialization.make_optim_input(self.calibs, self.opts, landmarks_rand, positions_rand,
+                                                                      oris_flu_rand, landmark_vecs=landmark_vecs_rand)[:2]
+            error_wrapper = bboVisO.viso_3derr.objfun_3d_wrapper(vars_free, args).reshape(error.shape)
 
             # Test
             np.testing.assert_allclose(error_wrapper, error, rtol=1e-10, atol=1e-10)

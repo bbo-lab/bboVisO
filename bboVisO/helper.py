@@ -1,8 +1,8 @@
 import numpy as np
 from calibcamlib import Camerasystem
-from scipy.interpolate import interp1d
-from scipy.spatial.transform import Slerp, Rotation as R
+from scipy.spatial.transform import Rotation as R
 
+from bbo.geometry import RigidTransform
 
 def get_cam_time_bases(frame_idxs, cam_fps, cam_offsets, opts):
     offsets = (np.array(cam_offsets)).astype(np.uint64)
@@ -80,94 +80,6 @@ def landmarks_to_array(landmark_coordinates, detected_labels):
     return landmarks_all, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_use
 
 
-def interpolate_mask(time, pos, ori, mask):
-    if np.sum(mask) / len(mask) < 0.25 or np.sum(mask) == 1:
-        return pos, ori
-
-    pos_interp_f = [interp1d(time[mask], p, fill_value='extrapolate') for p in pos[mask].T]
-    pos_interp = np.array([i_f(time) for i_f in pos_interp_f]).T
-
-    mask[0] = True  # Slerp cannot extrapolate
-    mask[-1] = True
-    ori_spline = Slerp(time[mask], ori[mask])
-    # ori_q = ori.as_quat()
-    # ori_q = ori_q * np.sign(ori_q[:, (0,)])
-    # ori_interp_f = [interp1d(time[mask], o, fill_value='extrapolate') for o in ori_q[mask].T]
-    # ori_interp = np.array([i_f(time) for i_f in ori_interp_f]).T
-
-    return pos_interp, ori_spline(time)
-
-
-def interpolate_imcoords(array_2d, array_time_base, calibs, sub_time_bases=None):
-    # Interpolates time points in array_2d that are not part of sub_time_bases
-
-    cs = Camerasystem.from_calibs(calibs)
-
-    # create mask of frames that belong to one of the sub_time_bases that make up the array_time_base
-    if sub_time_bases is None:
-        sub_time_base_members = 2 * [np.ones_like(array_time_base, dtype=bool)]
-    else:
-        sub_time_base_members = []
-        for sub_time_base in sub_time_bases:
-            sub_time_base_members.append(np.isin(array_time_base, sub_time_base))
-    sub_time_base_members = np.array(sub_time_base_members)
-
-    # This has shape cam x times x markers x coords
-    array_3d = cs.get_camera_lines(array_2d)[0]
-
-    pretimes = array_time_base[1:] - array_time_base[:-1]
-
-    array_3d_interp = (array_3d[:, :-2] * pretimes[1:][np.newaxis, ..., np.newaxis, np.newaxis] +
-                       array_3d[:, 2:] * pretimes[:-1][np.newaxis, ..., np.newaxis, np.newaxis])
-    array_3d_interp /= np.linalg.norm(array_3d_interp, axis=-1, keepdims=True)
-
-    # This changes array_3d IN PLACE!, replacing only the values previously nan
-    array_3d_ireg = array_3d[:, 1:-1]
-    for i_cam, sub_time_base_member in enumerate(sub_time_base_members):
-        mask = np.isnan(array_3d_ireg)[i_cam] & (~sub_time_base_member[1:-1, np.newaxis, np.newaxis])
-        array_3d_ireg[i_cam, mask] = array_3d_interp[i_cam, mask]
-
-    # This has shape cam x cam x times x markers x coords
-    # TODO: The following project_dir ignores different perspectives from different cameras
-    array_2d_interp = cs.project(array_3d)
-
-    # Replace only entries that were previously nan.
-    array_2d_out = array_2d.copy()
-    for i_cam in range(len(array_2d_out)):
-        array_2d_out[i_cam][np.isnan(array_2d_out[i_cam])] = array_2d_interp[i_cam, i_cam][
-            np.isnan(array_2d_out[i_cam])]
-
-    # TODO: The following nanmean ignores different perspectives from different cameras
-    return array_2d_out, array_3d, array_time_base
-
-
-def interpolate_imcoords_rebase(array_2d, array_time_base, calibs, dt, time_base=None):
-    cs = Camerasystem.from_calibs(calibs)
-    array_3d = cs.get_camera_lines(array_2d)[0]
-
-    if time_base is None:
-        time_base = array_time_base
-
-    array_3d_interp = np.full((array_2d.shape[0], len(time_base), array_2d.shape[2], 3), np.nan)
-    for i_c, array_3d_cam in enumerate(array_3d):
-        array_3d_cam = array_3d_cam.transpose((1, 0, 2))
-        for i_m, array_3d_cam_marker in enumerate(array_3d_cam):
-            nan_mask = np.any(np.isnan(array_3d_cam_marker), axis=-1)
-            if np.sum(~nan_mask) < 2:
-                continue
-            no_nan_array_time_base = array_time_base[~nan_mask]
-            array_3d_cam_marker_if = [interp1d(array_time_base[~nan_mask], a, fill_value="extrapolate") for a in
-                                      array_3d_cam_marker[~nan_mask].T]
-            array_3d_cam_marker_i = np.array([i_f(time_base) for i_f in array_3d_cam_marker_if]).T
-            array_3d_cam_marker_i[~generate_immediate_neighbor_mask(time_base, no_nan_array_time_base, dt)] = np.nan
-            array_3d_interp[i_c, :, i_m] = array_3d_cam_marker_i
-
-    array_2d_interp = cs.project_dir(array_3d_interp)
-    array_2d_out = np.diagonal(array_2d_interp, axis1=0, axis2=1).transpose((3, 0, 1, 2))
-
-    return array_2d_out, array_3d_interp, time_base
-
-
 def generate_immediate_neighbor_mask(ts, neighbor_ts, max_dist):
     ts = ts.reshape((-1,))
     neighbor_ts = neighbor_ts.reshape((-1, 1))
@@ -216,3 +128,11 @@ def landmark_imcoords_from_vecs(landmark_vecs, calibs):
     raise Exception("This needs to be reimplemented taking into account camera positions")
     landmark_imcoords = cs.project_dir(landmark_vecs)
     return landmark_imcoords
+
+def update_calibs_extrinsics(calibs, camera_positions, camera_rotations):
+    world2cam_trafo = RigidTransform(rotation=R.from_rotvec(camera_rotations), translation=camera_positions).inv()
+    for i_c, c in enumerate(calibs):
+        c["rvec_cam"] = world2cam_trafo[i_c].get_rotation().as_rotvec().reshape((3,))
+        c["tvec_cam"] = world2cam_trafo[i_c].get_translation().reshape((3,))
+
+    return calibs

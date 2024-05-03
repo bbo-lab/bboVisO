@@ -6,6 +6,10 @@ from scipy.spatial.transform import Rotation as R
 
 from calibcamlib.camerasystem import Camerasystem
 
+import bboVisO.alignment
+import bboVisO.initialization
+import bboVisO.viso_3derr
+import bboVisO.viso_repro
 from bboVisO import viso as viso
 
 
@@ -36,16 +40,16 @@ def get_simulated_data(calibs, opts,
     landmark_imcoords_perturbed = reproject_landmarks(landmark_vecs_perturbed * landmark_dists[..., np.newaxis],
                                                       camerasystem)
 
-    vars_free_opt, args_opt = viso.make_optim_input(calibs, opts, landmarks, positions,
-                                                    oris_flu.as_rotvec(),
-                                                    landmark_imcoords=landmark_imcoords_perturbed)[0:2]
-    error_repro = viso.objfun_repro_wrapper(vars_free_opt, args_opt)
-    error_3d_repro = viso.objfun_3d_wrapper(vars_free_opt, args_opt)
+    vars_free_opt, args_opt = bboVisO.initialization.make_optim_input(calibs, opts, landmarks, positions,
+                                                                      oris_flu.as_rotvec(),
+                                                                      landmark_imcoords=landmark_imcoords_perturbed)[0:2]
+    error_repro = bboVisO.viso_repro.objfun_repro_wrapper(vars_free_opt, args_opt)
+    error_3d_repro = bboVisO.viso_3derr.objfun_3d_wrapper(vars_free_opt, args_opt)
 
-    vars_free_opt, args_opt = viso.make_optim_input(calibs, opts, landmarks, positions,
-                                                    oris_flu.as_rotvec(),
-                                                    landmark_vecs=landmark_vecs_perturbed)[0:2]
-    error_3d = viso.objfun_3d_wrapper(vars_free_opt, args_opt)
+    vars_free_opt, args_opt = bboVisO.initialization.make_optim_input(calibs, opts, landmarks, positions,
+                                                                      oris_flu.as_rotvec(),
+                                                                      landmark_vecs=landmark_vecs_perturbed)[0:2]
+    error_3d = bboVisO.viso_3derr.objfun_3d_wrapper(vars_free_opt, args_opt)
 
     cost = 0.5 * np.sum(error_repro ** 2)
     print(f"Ground truth repro cost: {cost}")
@@ -208,9 +212,9 @@ def calc_orientation_errors(orientations_real, orientations):
 
 def print_errors(landmarks, positions, oris_flu, landmarks_opt, positions_opt, oris_flu_opt):
     # Realign result from position[0]-centered to landmark-centered
-    landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_landmarks(landmarks, landmarks_opt,
-                                                                                             positions_opt,
-                                                                                             oris_flu_opt)
+    landmarks_aligned, positions_aligned, oris_flu_aligned = bboVisO.alignment.align_results_by_landmarks(landmarks, landmarks_opt,
+                                                                                                          positions_opt,
+                                                                                                          oris_flu_opt)
 
     print(
         f"Max position error (landmark alignment): {np.max(np.linalg.norm(positions - positions_aligned, axis=-1))} m")
@@ -220,9 +224,9 @@ def print_errors(landmarks, positions, oris_flu, landmarks_opt, positions_opt, o
           f"{np.max(calc_orientation_errors(oris_flu.as_rotvec(), oris_flu_aligned)) / np.pi * 180} deg")
     print()
 
-    landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_positions(positions, landmarks_opt,
-                                                                                             positions_opt,
-                                                                                             oris_flu_opt)
+    landmarks_aligned, positions_aligned, oris_flu_aligned = bboVisO.alignment.align_results_by_positions(positions, landmarks_opt,
+                                                                                                          positions_opt,
+                                                                                                          oris_flu_opt)
     print(
         f"Max position error (position alignment): {np.max(np.linalg.norm(positions - positions_aligned, axis=-1))} m")
     print(
@@ -231,8 +235,8 @@ def print_errors(landmarks, positions, oris_flu, landmarks_opt, positions_opt, o
           f"{np.max(calc_orientation_errors(oris_flu.as_rotvec(), oris_flu_aligned)) / np.pi * 180} deg")
     print()
 
-    landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_perches(landmarks, landmarks_opt,
-                                                                                           positions_opt, oris_flu_opt)
+    landmarks_aligned, positions_aligned, oris_flu_aligned = bboVisO.alignment.align_results_by_perches(landmarks, landmarks_opt,
+                                                                                                        positions_opt, oris_flu_opt)
     print(f"Max position error (perch alignment): {np.max(np.linalg.norm(positions - positions_aligned, axis=-1))} m")
     print(f"Max landmark error (perch alignment): {np.max(np.linalg.norm(landmarks - landmarks_aligned, axis=-1))} m")
     print(f"Max orientation error (perch alignment): "
@@ -284,16 +288,16 @@ def run_simulated_data(opts, pertubation_deg=0.4, landmark_radius=50):
                                                                               )
     # Error output
     print_errors(landmarks, positions, oris_flu, landmarks_opt, positions_opt, oris_flu_opt)
-    vars_free_opt, args_opt = viso.make_optim_input(calibs, opts, landmarks_opt, positions_opt,
-                                                    oris_flu_opt,
-                                                    landmark_imcoords=landmark_imcoords,
-                                                    )[0:2]
-    error_repro = viso.objfun_repro_wrapper(vars_free_opt, args_opt)
+    vars_free_opt, args_opt = bboVisO.initialization.make_optim_input(calibs, opts, landmarks_opt, positions_opt,
+                                                                      oris_flu_opt,
+                                                                      landmark_imcoords=landmark_imcoords,
+                                                                      )[0:2]
+    error_repro = bboVisO.viso_repro.objfun_repro_wrapper(vars_free_opt, args_opt)
     cost_final = 0.5 * np.sum(error_repro ** 2)
     print(f"Optimized repro cost: {cost_final}")
     print(f"Optimized cost debts: {cost_final - cost_gt}")
 
-    landmarks_aligned, positions_aligned, oris_flu_aligned = viso.align_results_by_perches(landmarks, landmarks_opt,
-                                                                                           positions_opt, oris_flu_opt)
+    landmarks_aligned, positions_aligned, oris_flu_aligned = bboVisO.alignment.align_results_by_perches(landmarks, landmarks_opt,
+                                                                                                        positions_opt, oris_flu_opt)
 
     return landmarks_aligned, positions_aligned, oris_flu_aligned, list(range(positions.shape[0]))

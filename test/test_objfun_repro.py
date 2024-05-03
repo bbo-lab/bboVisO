@@ -1,5 +1,10 @@
 import os
 import sys
+
+import bboVisO.initialization
+import bboVisO.unravel
+import bboVisO.viso_repro
+
 sys.path.insert(0, os.path.dirname(__file__) + "/..")
 
 import unittest
@@ -13,7 +18,7 @@ import bboVisO.viso_ag as viso_ag
 
 class TestObjfunReproClass(VisOTestCase):
     def test_opt_objfun_repro(self):
-        cam_matrices, ks, xis, cam_Rs, cam_ts = viso.unpack_calibs(self.calibs)
+        cam_matrices, ks, xis, cam_Rs, cam_ts = bboVisO.unravel.unpack_calibs(self.calibs)
         error = np.nansum(
             viso_ag.objfun_repro(self.landmarks, self.positions, self.oris_flu.as_rotvec(), self.landmark_imcoords,
                                  cam_matrices, ks, xis, cam_Rs,
@@ -22,10 +27,10 @@ class TestObjfunReproClass(VisOTestCase):
         np.testing.assert_allclose(error, np.zeros_like(error), rtol=1e-10, atol=1e-10)
 
     def test_opt_objfun_wrapper_repro(self):
-        vars_free_opt, args_opt = viso.make_optim_input(self.calibs, self.opts, self.landmarks, self.positions,
-                                                        self.oris_flu.as_rotvec(),
-                                                        landmark_imcoords=self.landmark_imcoords)[0:2]
-        error = viso.objfun_repro_wrapper(vars_free_opt, args_opt)
+        vars_free_opt, args_opt = bboVisO.initialization.make_optim_input(self.calibs, self.opts, self.landmarks, self.positions,
+                                                                          self.oris_flu.as_rotvec(),
+                                                                          landmark_imcoords=self.landmark_imcoords)[0:2]
+        error = bboVisO.viso_repro.objfun_repro_wrapper(vars_free_opt, args_opt)
         max_error = np.max(np.abs(error))
         np.testing.assert_allclose(error, np.zeros_like(error), rtol=1e-10, atol=1e-10)
 
@@ -38,15 +43,15 @@ class TestObjfunReproClass(VisOTestCase):
                 self.pertubate_opt_quantities()
 
             # Calculate objective function directly
-            cam_matrices, ks, xis, cam_Rs, cam_ts = viso.unpack_calibs(self.calibs)
+            cam_matrices, ks, xis, cam_Rs, cam_ts = bboVisO.unravel.unpack_calibs(self.calibs)
             error = viso_ag.objfun_repro(landmarks_rand, positions_rand, oris_flu_rand, self.landmark_imcoords,
                                          cam_matrices, ks, xis, cam_Rs, cam_ts)
             error = np.nansum(error, axis=0)
 
             # Calculate objective function through wrapper
-            vars_free, args = viso.make_optim_input(self.calibs, self.opts, landmarks_rand, positions_rand,
-                                                    oris_flu_rand, landmark_imcoords=self.landmark_imcoords)[0:2]
-            error_wrapper = viso.objfun_repro_wrapper(vars_free, args)
+            vars_free, args = bboVisO.initialization.make_optim_input(self.calibs, self.opts, landmarks_rand, positions_rand,
+                                                                      oris_flu_rand, landmark_imcoords=self.landmark_imcoords)[0:2]
+            error_wrapper = bboVisO.viso_repro.objfun_repro_wrapper(vars_free, args)
 
             # Test
             np.testing.assert_allclose(error.ravel(), error_wrapper, rtol=1e-10, atol=1e-10)

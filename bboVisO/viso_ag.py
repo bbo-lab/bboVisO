@@ -9,15 +9,20 @@ def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices
     # Generate landmark positions relative to camera system
     if debug:
         pass
+    # print("X: ", landmarks)
     landmark_vecs = landmarks.reshape(1, -1, 3) - positions.reshape(-1, 1, 3)
     landmark_vecs = np.einsum('nji,nmj->nmi', rodrigues_as_rotmats(oris_flu), landmark_vecs)
+    # print("X_cam: ", landmark_vecs.shape, landmark_vecs)
 
+    # print("cam_Rs", cam_Rs.shape)
     # Generate landmark positions relative to camera system
     landmark_coords = camfuncs_ag.map_world_board_to_cams(
         landmark_vecs,
         cam_Rs.reshape((cam_Rs.shape[0], 1, 1, 3, 3)),
         cam_ts.reshape((cam_Rs.shape[0], 1, 1, 3))
     )
+
+    # print("X_cam_2: ", landmark_coords.shape, landmark_coords[3])
 
     landmark_coords = camfuncs_ag.board_to_unit_sphere(landmark_coords)
 
@@ -26,6 +31,8 @@ def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices
     landmark_coords = camfuncs_ag.to_ideal_plane(landmark_coords)
     landmark_coords = camfuncs_ag.distort(landmark_coords, ks)
     landmark_coords = camfuncs_ag.ideal_to_sensor(landmark_coords, cam_matrices)
+    # print("ideal2sensor", landmark_coords.shape, landmark_coords[3])
+    # print("landmark_imcoords", landmark_imcoords.shape, landmark_imcoords[3])
     #
     # print("Repro landmark_coords: ",landmark_coords)
     # print("Repro landmark_imcoords: ", landmark_imcoords)
@@ -38,6 +45,8 @@ def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices
     penalty = lm_close_pen_weight * calc_lm_close_penalty(landmarks, positions)
     # print("penalty: ", penalty)
     errors2d += penalty[np.newaxis, :, np.newaxis, np.newaxis]
+
+    # raise Exception()
 
     return errors2d
 
