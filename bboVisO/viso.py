@@ -138,8 +138,9 @@ def infer_position_attitude(times, calibs, opts,
             oris_flu_init = realign_by_distant_features(landmarks_init, landmark_imcoords, times,
                                                         positions_init, R.from_rotvec(oris_flu_init),
                                                         calibs).as_rotvec()
-
     print(f"Optimization took {time.time() - t} s")
+
+
 
     return landmarks_init, positions_init, oris_flu_init, calibs
 

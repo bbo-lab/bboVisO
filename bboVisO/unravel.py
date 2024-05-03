@@ -39,6 +39,7 @@ def unravel_vars(free_vars, args):
     oris_flu = vars_full[edges[2]:edges[3]].reshape(k, 3)
     cam_rotations = vars_full[edges[3]:edges[4]].reshape(m, 3)
     cam_translations = vars_full[edges[4]:edges[5]].reshape(m, 3)
+
     return landmarks, positions, oris_flu, cam_rotations, cam_translations
 
 

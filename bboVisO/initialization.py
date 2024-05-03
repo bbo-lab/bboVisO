@@ -141,9 +141,9 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
             )[0].as_rotvec()
 
     cam_trafo = RigidTransform(rotation=R.from_rotvec([c["rvec_cam"] for c in calibs]),
-                               translation=np.array([c["rvec_cam"] for c in calibs]))
+                               translation=np.array([c["tvec_cam"] for c in calibs]))
     extrinsics_rotations_init = cam_trafo.inv().get_rotation().as_rotvec()
-    extrinsics_translations_init = cam_trafo.inv().get_rotation().as_rotvec()
+    extrinsics_translations_init = cam_trafo.inv().get_translation()
 
     # Fill nan landmarks as good as possible
     for lm_idx, lm in enumerate(landmarks_init):
@@ -223,6 +223,7 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
 
     if opts["optimization"]["verbose"] > 0:  # TODO: better config option
         print(f"Optimizing {np.sum(mask_free_input)} of {mask_free_input.size} variables")
+
     return vars_free, vars_full, mask_free_input
 
 

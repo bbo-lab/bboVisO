@@ -17,6 +17,8 @@ import bboVisO.viso as viso
 from bboVisO.helper import get_cam_time_bases
 from bboVisO.output import save_to_text
 from bboVisO.visualisation import plot_frames
+from calibcam import yaml_helper
+
 
 # single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!
 # jax.config.update("jax_enable_x64", True)
@@ -119,16 +121,18 @@ def main():
                               zip(cam_time_bases, opts["add_offset"])]
 
             # Load calibration
-            calibs = calibcamlib.Camerasystem.load_dict(calibration.as_posix())["calibs"]
+            multicam_calibration = calibcamlib.Camerasystem.load_dict(calibration.as_posix())
+            calibs = multicam_calibration["calibs"]
 
             # Run odometry
-            landmarks, positions, oris, res_time_base, landmark_imcoords, error_repro, landmark_labels = \
+            landmarks, positions, oris, res_time_base, landmark_imcoords, error_repro, landmark_labels, calibs = \
                 run(
                     landmark_labels=landmark_labels,
                     landmark_coordinates=landmark_coordinates,
                     calibs=calibs,
                     time_bases=cam_time_bases,
                     opts=opts)
+            multicam_calibration["calibs"] = calibs
 
             # Generate text files from output
             if args.text_out:
@@ -136,6 +140,10 @@ def main():
                 os.makedirs(path, exist_ok=True)
                 save_to_text(path, res_time_base, landmarks, positions, oris, error_repro, opts, landmark_labels,
                              landmark_coordinates)
+                with open((path / "multicam_calibration_viso.yml"), "w") as yml_file:
+                    yaml.dump(yaml_helper.numpy_collection_to_list(multicam_calibration),
+                              yml_file, default_flow_style=True)
+                print(f"Saved to {path}")
 
             # Generate images from output (DEPRECATED: Use check GUI instead!)
             if args.img_out and videos is not None:

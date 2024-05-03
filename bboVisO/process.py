@@ -151,4 +151,4 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
 
     landmarks, positions, oris_flu = (landmarks_opt, positions_opt, oris_flu_opt)
 
-    return landmarks, positions, oris_flu, time_base, landmark_imcoords, error_repro, labels
+    return landmarks, positions, oris_flu, time_base, landmark_imcoords, error_repro, labels, calibs
