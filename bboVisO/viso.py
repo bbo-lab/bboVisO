@@ -7,7 +7,7 @@ from scipy.optimize import least_squares, OptimizeResult
 from bboVisO.helper import realign_by_distant_features, update_calibs_extrinsics
 from bboVisO.initialization import make_optim_input, fill_landmark_imcoords_vecs, get_precalc
 from bboVisO.interpolation import interpolate_high_error, interpolate_close_marker
-from bboVisO.method_switches import objective_function
+from bboVisO.method_switches import objective_function, jacobian_function
 from bboVisO.unravel import unravel_vars
 
 debug = False
@@ -30,6 +30,11 @@ def infer_position_attitude(times, calibs, opts,
 
     # Iterate through optimization types
     for i_iter, iter_opts in enumerate(opts["iterations"]):
+        # Adjust options
+        if iter_opts["optimization"]["jac"] == "jax":
+            iter_opts["optimization"]["jac"] = jacobian_function(iter_opts)
+            iter_opts["sparse_jacobian"] = False
+
         # Iterate through opimization steps
         for i_opti, opt in enumerate(iter_opts["optimize"]):
             if (iter_opts["interpolate_high_error"] and iter_opts["interpolate_high_error"] != -1
@@ -64,9 +69,11 @@ def infer_position_attitude(times, calibs, opts,
                                                                   landmark_vecs=landmark_vecs)
 
             error = objective_function(iter_opts)(vars_free, objfun_args, no_ravel=True)
-            max_errors = np.nanmax(error, axis=tuple(range(1, len(error.shape))))
+            max_errors = np.nanmax(error, axis=(0,)+tuple(range(2, len(error.shape))))
             error_mask = max_errors >= iter_opts["max_error_median_factor"] * np.nanmedian(max_errors)
+
             if positions_init is not None:
+                print("positions_init", positions_init.shape)
                 positions_init_iter = positions_init[error_mask]
             else:
                 positions_init_iter = None

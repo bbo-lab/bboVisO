@@ -47,8 +47,10 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
         jac_sparsity = None  # TODO: implement
     optim_args = {
         'bounds': np.array([[-np.inf, np.inf]] * vars_free.size).T,
-        'jac_sparsity': jac_sparsity
     }
+
+    if opts["sparse_jacobian"]:
+        optim_args['jac_sparsity'] = jac_sparsity
 
     return vars_free, obfun_args, optim_args
 
@@ -98,6 +100,11 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
     # Initializations
     if landmarks is not None:
         landmarks_init = landmarks
+        #
+        # for i_lm, lm in enumerate(landmarks):
+        #     if np.any(np.isnan(lm)):
+        #         if landmark_vecs[:,:,i_lm]
+
     else:
         # Initialize to a distance of 100m into the direction of the  respective camera vectors
         landmarks_init = build_vector_bundle(landmark_vectors_sphere[0], landmark_vectors_sphere[1:]) * 100
@@ -181,10 +188,10 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
         oris_flu_free[:] = False
     if "extrinsics_r" not in optimize:
         extrinsics_rotations_free[:] = False
-    extrinsics_rotations_free[:3] = False  # Leave reference cam
+    extrinsics_rotations_free[0] = False  # Leave reference cam
     if "extrinsics_t" not in optimize:
         extrinsics_translations_free[:] = False
-    extrinsics_translations_free[:3] = False  # Leave reference cam
+    extrinsics_translations_free[0] = False  # Leave reference cam
 
     if landmarks_optimize is not None:
         landmarks_free[~landmarks_optimize] = False
@@ -235,10 +242,10 @@ def get_precalc(opts):
         precalc_lazy = {
             'objfunc_repro': jit(viso_ag.objfun_repro, backend=opts["jax_backend"]),
             'jacobians_repro': [jit(jacobian(viso_ag.objfun_repro, i_var), backend=opts["jax_backend"])
-                                for i_var in range(3)],
+                                for i_var in range(5)],
             'objfunc_angular': jit(viso_ag.objfun_angular, backend=opts["jax_backend"]),
             'jacobians_angular': [jit(jacobian(viso_ag.objfun_angular, i_var), backend=opts["jax_backend"])
-                                  for i_var in range(3)],
+                                  for i_var in range(4)],
             # 'objfunc_3d': jit(viso_ag.objfun_3d, backend=opts["jax_backend"]),
             # 'jacobians_3d': [jit(jacobian(viso_ag.objfun_3d, i_var), backend=opts["jax_backend"])
             #                  for i_var in range(3)],

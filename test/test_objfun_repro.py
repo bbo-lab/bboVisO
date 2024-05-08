@@ -20,9 +20,8 @@ class TestObjfunReproClass(VisOTestCase):
     def test_opt_objfun_repro(self):
         cam_matrices, ks, xis, cam_Rs, cam_ts = bboVisO.unravel.unpack_calibs(self.calibs)
         error = np.nansum(
-            viso_ag.objfun_repro(self.landmarks, self.positions, self.oris_flu.as_rotvec(), self.landmark_imcoords,
-                                 cam_matrices, ks, xis, cam_Rs,
-                                 cam_ts), axis=0)
+            viso_ag.objfun_repro(self.landmarks, self.positions, self.oris_flu.as_rotvec(), cam_Rs, cam_ts,
+                                 self.landmark_imcoords, cam_matrices, ks, xis, ), axis=0)
         max_error = np.max(np.abs(error))
         np.testing.assert_allclose(error, np.zeros_like(error), rtol=1e-10, atol=1e-10)
 
@@ -44,8 +43,8 @@ class TestObjfunReproClass(VisOTestCase):
 
             # Calculate objective function directly
             cam_matrices, ks, xis, cam_Rs, cam_ts = bboVisO.unravel.unpack_calibs(self.calibs)
-            error = viso_ag.objfun_repro(landmarks_rand, positions_rand, oris_flu_rand, self.landmark_imcoords,
-                                         cam_matrices, ks, xis, cam_Rs, cam_ts)
+            error = viso_ag.objfun_repro(landmarks_rand, positions_rand, oris_flu_rand, cam_Rs, cam_ts,
+                                         self.landmark_imcoords, cam_matrices, ks, xis, )
             error = np.nansum(error, axis=0)
 
             # Calculate objective function through wrapper

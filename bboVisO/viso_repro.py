@@ -9,12 +9,10 @@ from bboVisO.unravel import unravel_vars, unpack_calibs
 
 def objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs, opts) -> np.ndarray:
     cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(calibs)
-    errors2d = viso_ag.objfun_repro(landmarks, positions, oris_flu,
-                                    landmark_imcoords,
-                                    cam_matrices, ks, xis, cam_Rs, cam_ts,
-                                    opts["lm_close_pen_weight"], True)
+    errors2d = np.array(viso_ag.objfun_repro(landmarks, positions, oris_flu, cam_Rs, cam_ts, landmark_imcoords, cam_matrices, ks,
+                                    xis, opts["lm_close_pen_weight"], True))
 
-    return np.nansum(errors2d, axis=0)
+    return errors2d
 
 
 def objfun_repro_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
@@ -22,33 +20,29 @@ def objfun_repro_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
         landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight = unravel_vars_repro(free_vars,
                                                                                                            args)
 
-    errors2d = args['precalc']['objfunc_repro'](landmarks, positions, oris_flu,
-                                                landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts,
-                                                lm_close_pen_weight)
-
+    errors2d = np.array(args['precalc']['objfunc_repro'](landmarks, positions, oris_flu, cam_Rs, cam_ts,
+                                                landmark_imcoords, cam_matrices, ks, xis,
+                                                lm_close_pen_weight))
     if no_ravel:
-        return np.nansum(errors2d, axis=0)
+        return errors2d
     else:
-        return np.nansum(errors2d, axis=0).ravel()
+        errors2d[np.isnan(errors2d)] = 0
+        return errors2d.ravel()
 
 
 def objfun_repro_jacobian_wrapper(free_vars, args) -> np.ndarray:
     landmarks, positions, oris_flu, \
         landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight = unravel_vars_repro(free_vars,
                                                                                                            args)
-
-    landmarks = np.where(landmarks == 0, 1e-8, landmarks)
-    positions = np.where(positions == 0, 1e-8, positions)
-    oris_flu = np.where(oris_flu == 0, 1e-8, oris_flu)
-    cam_matrices = np.where(cam_matrices == 0, 1e-8, cam_matrices)
-    cam_Rs = np.where(cam_Rs == 0, 1e-8, cam_Rs)
+    result_shape = landmark_imcoords.shape
 
     # TODO (minor speed) Do not calculate Jacobian if there are no related free variables
     obj_fcn_jacobian = [
         np.array(
             # Ravel over input dimensions
-            j(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts).reshape(
-                landmark_imcoords.shape + (-1,))
+            j(landmarks, positions, oris_flu, cam_Rs, cam_ts, landmark_imcoords, cam_matrices, ks, xis,
+              lm_close_pen_weight).reshape(
+                result_shape + (-1,))
         )
         for j in args['precalc']['jacobians_repro']
     ]
@@ -61,11 +55,10 @@ def objfun_repro_jacobian_wrapper(free_vars, args) -> np.ndarray:
         obj_fcn_jacobian,
         axis=4)
 
-    # Combine the 2 cameras (one will be nan)
-    obj_fcn_jacobian = np.nansum(obj_fcn_jacobian, axis=0)
+    print("obj_fcn_jacobian", obj_fcn_jacobian.shape)
 
     # Ravel variable dimension
-    obj_fcn_jacobian = obj_fcn_jacobian.reshape((-1, args['mask_opt'].size))
+    obj_fcn_jacobian = obj_fcn_jacobian.reshape((np.product(result_shape), args['mask_opt'].size))
 
     # Dump non-free variables
     obj_fcn_jacobian = obj_fcn_jacobian[:, args['mask_opt']]
@@ -76,18 +69,18 @@ def objfun_repro_jacobian_wrapper(free_vars, args) -> np.ndarray:
 def make_jacobian_sparsity_mask_repro(m, k, n, mask_free_input):
     d = 2  # Output dimension, imcoords
     # TODO: Make sparse matrix
-    jac_sparsity_lm = np.zeros((d, k, n) + (n, 3), dtype=bool)
+    jac_sparsity_lm = np.zeros((m, d, k, n) + (n, 3), dtype=bool)
     for i_n in range(n):
-        jac_sparsity_lm[:, :, i_n, i_n] = True
-    jac_sparsity_lm = jac_sparsity_lm.reshape((d * k * n, -1))
+        jac_sparsity_lm[:, :, :, i_n, i_n] = True
+    jac_sparsity_lm = jac_sparsity_lm.reshape((m * d * k * n, -1))
 
-    jac_sparsity_pos_rot = np.zeros((d, k, n) + (k, 3), dtype=bool)
+    jac_sparsity_pos_rot = np.zeros((m, d, k, n) + (k, 3), dtype=bool)
     for i_k in range(k):
-        jac_sparsity_pos_rot[:, i_k, :, i_k] = True
-    jac_sparsity_pos_rot = jac_sparsity_pos_rot.reshape((d * k * n, -1))
+        jac_sparsity_pos_rot[:, :, i_k, :, i_k] = True
+    jac_sparsity_pos_rot = jac_sparsity_pos_rot.reshape((m * d * k * n, -1))
 
-    jac_sparsity_cam_pos_rot = np.ones((d, k, n) + (m, 3), dtype=bool)
-    jac_sparsity_cam_pos_rot = jac_sparsity_cam_pos_rot.reshape((d * k * n, -1))
+    jac_sparsity_cam_pos_rot = np.ones((m, d, k, n) + (m, 3), dtype=bool)
+    jac_sparsity_cam_pos_rot = jac_sparsity_cam_pos_rot.reshape((m * d * k * n, -1))
 
     jac_sparsity = np.hstack((jac_sparsity_lm,
                               jac_sparsity_pos_rot,
@@ -95,6 +88,7 @@ def make_jacobian_sparsity_mask_repro(m, k, n, mask_free_input):
                               jac_sparsity_cam_pos_rot,
                               jac_sparsity_cam_pos_rot,))
 
+    jac_sparsity[:] = True  # Until this gives the same result ...
     return jac_sparsity[:, mask_free_input]
 
 

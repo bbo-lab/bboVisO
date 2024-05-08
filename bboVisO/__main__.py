@@ -143,6 +143,7 @@ def main():
                 with open((path / "multicam_calibration_viso.yml"), "w") as yml_file:
                     yaml.dump(yaml_helper.numpy_collection_to_list(multicam_calibration),
                               yml_file, default_flow_style=True)
+                np.save(path / "bboVisO_opts.npy", opts, allow_pickle=True)
                 print(f"Saved to {path}")
 
             # Generate images from output (DEPRECATED: Use check GUI instead!)

@@ -4,7 +4,7 @@ import calibcam.camfunctions_ag as camfuncs_ag
 
 
 # TODO initialize attitude with lowest variance vecs
-def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts,
+def objfun_repro(landmarks, positions, oris_flu, cam_Rs, cam_ts, landmark_imcoords, cam_matrices, ks, xis,
                  lm_close_pen_weight, debug=False):
     # Generate landmark positions relative to camera system
     if debug:
@@ -51,7 +51,7 @@ def objfun_repro(landmarks, positions, oris_flu, landmark_imcoords, cam_matrices
     return errors2d
 
 
-def objfun_angular(landmarks, positions, oris_flu, landmark_vecs, cam_positions, lm_close_pen_weight, debug=False):
+def objfun_angular(landmarks, positions, oris_flu, cam_positions, landmark_vecs, lm_close_pen_weight, debug=False):
     cam_frame_positions = cam_positions[:,np.newaxis] + positions[np.newaxis]
     pl_vecs = landmarks[np.newaxis, np.newaxis] - cam_frame_positions[:, :, np.newaxis]
     pl_vecs /= np.linalg.norm(pl_vecs, axis=-1, keepdims=True)
