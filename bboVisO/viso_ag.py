@@ -4,25 +4,18 @@ import calibcam.camfunctions_ag as camfuncs_ag
 
 
 # TODO initialize attitude with lowest variance vecs
-def objfun_repro(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoords, cam_matrices, ks, xis,
-                 lm_close_pen_weight, debug=False):
-    # Generate landmark positions relative to camera system
-    if debug:
-        pass
-    # print("X: ", landmarks)
-    landmark_vecs = landmarks.reshape(1, -1, 3) - positions.reshape(-1, 1, 3)
-    landmark_vecs = np.einsum('nji,nmj->nmi', rodrigues_as_rotmats(oris_flu), landmark_vecs)
-    # print("X_cam: ", landmark_vecs.shape, landmark_vecs)
+def objfun_repro(landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
+                 landmark_imcoords, cam_matrices, ks, xis, lm_close_pen_weight):
+    # Transform landmarks into coordinate system of camera system
+    landmark_coords = landmarks.reshape(1, -1, 3) - positions.reshape(-1, 1, 3)
+    landmark_coords = np.einsum('nji,nmj->nmi', rodrigues_as_rotmats(oris_flu), landmark_coords)
 
-    # print("cam_Rs", cam_Rs.shape)
-    # Generate landmark positions relative to camera system
+    # Transform landmarks into coordinate system of individual cameras
     landmark_coords = camfuncs_ag.map_world_board_to_cams(
-        landmark_vecs,
+        landmark_coords,
         rodrigues_as_rotmats(cam_rotvecs).reshape((cam_rotvecs.shape[0], 1, 1, 3, 3)),
         cam_ts.reshape((cam_rotvecs.shape[0], 1, 1, 3))
     )
-
-    # print("X_cam_2: ", landmark_coords.shape, landmark_coords[3])
 
     landmark_coords = camfuncs_ag.board_to_unit_sphere(landmark_coords)
 
@@ -51,18 +44,23 @@ def objfun_repro(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_i
     return errors2d
 
 
-def objfun_angular(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_vecs, lm_close_pen_weight, debug=False):
-    cam_positions = -np.einsum('nim,ni->nm', rodrigues_as_rotmats(cam_rotvecs), cam_ts)
+def objfun_angular(landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
+                   landmark_vecs, lm_close_pen_weight):
+    # Transform landmarks into coordinate system of camera system
+    landmark_coords = landmarks.reshape(1, -1, 3) - positions.reshape(-1, 1, 3)
+    landmark_coords = np.einsum('nji,nmj->nmi', rodrigues_as_rotmats(oris_flu), landmark_coords)
 
-    # print(cam_positions)
+    # Transform landmarks into coordinate system of individual cameras
+    landmark_coords = camfuncs_ag.map_world_board_to_cams(
+        landmark_coords,
+        rodrigues_as_rotmats(cam_rotvecs).reshape((cam_rotvecs.shape[0], 1, 1, 3, 3)),
+        cam_ts.reshape((cam_rotvecs.shape[0], 1, 1, 3))
+    )
 
-    cam_frame_positions = cam_positions[:,np.newaxis] + positions[np.newaxis]
-    pl_vecs = landmarks[np.newaxis, np.newaxis] - cam_frame_positions[:, :, np.newaxis]
-    pl_vecs /= np.linalg.norm(pl_vecs, axis=-1, keepdims=True)
+    # Normalize vectors
+    landmark_coords /= np.linalg.norm(landmark_coords, axis=-1, keepdims=True)
 
-    # errors_ang = 1 - np.sum(pl_vecs * np.einsum('nij,nmj->nmi', rodrigues_as_rotmats(oris_flu), landmark_vecs), axis=-1)
-    errors_ang = np.arccos(
-        np.sum(pl_vecs * np.einsum('nij,lnmj->lnmi', rodrigues_as_rotmats(oris_flu), landmark_vecs), axis=-1))
+    errors_ang = np.arccos(np.sum(landmark_coords * landmark_vecs, axis=-1))
 
     # We lightly penalize positions too close to landmarks
     penalty = np.zeros(len(positions))  # lm_close_pen_weight * calc_lm_close_penalty(landmarks, positions)

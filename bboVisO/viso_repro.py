@@ -11,7 +11,7 @@ def objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calib
     cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(calibs)
     errors2d = np.array(viso_ag.objfun_repro(landmarks, positions, oris_flu, R.from_matrix(cam_Rs).as_rotvec(), cam_ts,
                                              landmark_imcoords, cam_matrices, ks, xis,
-                                             opts["lm_close_pen_weight"], True))
+                                             opts["lm_close_pen_weight"]))
 
     return errors2d
 
@@ -34,10 +34,6 @@ def objfun_repro_jacobian_wrapper(free_vars, args) -> np.ndarray:
     (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
      landmark_imcoords, cam_matrices, ks, xis, lm_close_pen_weight) = unravel_vars_repro(free_vars, args)
     result_shape = landmark_imcoords.shape
-
-    # print("landmarks", landmarks.shape)
-    # print("positions", positions.shape)
-    # print("landmark_imcoords", landmark_imcoords.shape)
 
     # TODO (minor speed) Do not calculate Jacobian if there are no related free variables
     obj_fcn_jacobian = [

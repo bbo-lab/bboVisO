@@ -19,10 +19,6 @@ def objfun_angular_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
     (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
      landmark_vecs, lm_close_pen_weight) = unravel_vars_angular(free_vars, args)
 
-    # world2cam_trafo = RigidTransform(rotation=R.from_rotvec(cam_rotvecs), translation=cam_ts).inv()
-    # cam_rotvecs = world2cam_trafo.get_rotation().as_rotvec()
-    # cam_ts = world2cam_trafo.get_translation()
-
     errors_angular = np.array(args['precalc']['objfunc_angular'](landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
                                                                  landmark_vecs, lm_close_pen_weight))
 
