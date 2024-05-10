@@ -17,12 +17,9 @@ def objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calib
 
 
 def objfun_repro_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
-    (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
-     landmark_imcoords, cam_matrices, ks, xis, lm_close_pen_weight) = unravel_vars_repro(free_vars, args)
+    obfun_inputs = unravel_vars_repro(free_vars, args)
+    errors2d = np.array(args['precalc']['objfunc_repro'](*obfun_inputs))
 
-    errors2d = np.array(args['precalc']['objfunc_repro'](landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
-                                                         landmark_imcoords, cam_matrices, ks, xis,
-                                                         lm_close_pen_weight))
     if no_ravel:
         return errors2d
     else:
@@ -46,20 +43,13 @@ def objfun_repro_jacobian_wrapper(free_vars, args) -> np.ndarray:
         for j in args['precalc']['jacobians_repro']
     ]
 
-    # print([j.shape for j in obj_fcn_jacobian])
-
-    # for i, jac in enumerate(obj_fcn_jacobian):
-    #     print(f"Jacobian {i} norm: {np.linalg.norm(jac)}")
-
     # Concatenate along input dimensions
     obj_fcn_jacobian = np.concatenate(
         obj_fcn_jacobian,
         axis=4)
 
-    # print("obj_fcn_jacobian", obj_fcn_jacobian.shape)
-
     # Ravel variable dimension
-    obj_fcn_jacobian = obj_fcn_jacobian.reshape((np.product(result_shape), args['mask_opt'].size))
+    obj_fcn_jacobian = obj_fcn_jacobian.reshape((np.prod(result_shape), args['mask_opt'].size))
 
     # Dump non-free variables
     obj_fcn_jacobian = obj_fcn_jacobian[:, args['mask_opt']]

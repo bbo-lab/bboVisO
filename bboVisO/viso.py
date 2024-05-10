@@ -1,3 +1,4 @@
+import sys
 import time
 
 import numpy as np
@@ -11,6 +12,7 @@ from bboVisO.method_switches import objective_function, jacobian_function
 from bboVisO.unravel import unravel_vars
 
 debug = False
+
 
 def infer_position_attitude(times, calibs, opts,
                             landmark_imcoords=None, landmark_vecs=None,
@@ -37,8 +39,8 @@ def infer_position_attitude(times, calibs, opts,
 
         # Iterate through opimization steps
         for i_opti, opt in enumerate(iter_opts["optimize"]):
-            if (iter_opts["interpolate_high_error"] and iter_opts["interpolate_high_error"] != -1
-                and positions_init is not None) and oris_flu_init is not None:
+            if (iter_opts["interpolate_high_error"] and iter_opts["interpolate_high_error"] != -1 and
+                    positions_init is not None and oris_flu_init is not None):
                 print(f"Interpolating high errors")
                 # This might help to get the system out of local minima in case of wrong markings.
                 # The last step is always an optimization, though. The check_gui also implements this
@@ -57,73 +59,73 @@ def infer_position_attitude(times, calibs, opts,
                 positions_init, oris_flu_init = interpolate_close_marker(times, positions_init, oris_flu_init,
                                                                          opts=iter_opts,
                                                                          landmarks=landmarks_init)
+            cost = []
+            cost_pre = []
+            if iter_opts["optimize_single_frames"]:
+                print(f"Optimizing {opt} - Single frames")
+                assert set(opt).issubset(["positions", "oris"]), ("Single frames can only be optimized for position "
+                                                                  "and orientation")
 
-            # Run optimization
-            print(f"Optimizing {opt}")
-            vars_free, objfun_args, optim_args = make_optim_input(calibs, iter_opts,
-                                                                  landmarks_init, positions_init, oris_flu_init,
-                                                                  optimize=opt, landmarks_optimize=landmarks_optimize,
-                                                                  landmarks_far=landmarks_far,
-                                                                  precalc=precalc,
-                                                                  landmark_imcoords=landmark_imcoords,
-                                                                  landmark_vecs=landmark_vecs)
+                for i_fr in range(len(positions_init)):  # TODO paralellize
+                    # Run optimization
+                    vars_free, objfun_args, optim_args = make_optim_input(calibs, iter_opts,
+                                                                          landmarks_init,
+                                                                          positions_init[(i_fr,),],
+                                                                          oris_flu_init[(i_fr,),],
+                                                                          optimize=opt,
+                                                                          landmarks_optimize=landmarks_optimize,
+                                                                          landmarks_far=landmarks_far,
+                                                                          precalc=precalc,
+                                                                          landmark_imcoords=landmark_imcoords[:,
+                                                                                            (i_fr,), ],
+                                                                          landmark_vecs=landmark_vecs[:, (i_fr,), ])
 
-            error = objective_function(iter_opts)(vars_free, objfun_args, no_ravel=True)
-            max_errors = np.nanmax(error, axis=(0,)+tuple(range(2, len(error.shape))))
-            error_mask = max_errors >= iter_opts["max_error_median_factor"] * np.nanmedian(max_errors)
+                    error = objective_function(iter_opts)(vars_free, objfun_args)
+                    cost_pre.append(np.sum(error ** 2) / 2)
+                    if i_fr == 0:
+                        t_objfun = time.time()
+                        objective_function(iter_opts)(vars_free, objfun_args)
+                        print(f"Objective function evaluation took {time.time() - t_objfun}s")
 
-            if positions_init is not None:
-                print("positions_init", positions_init.shape)
-                positions_init_iter = positions_init[error_mask]
+                        if not isinstance(iter_opts["optimization"]["jac"], str):
+                            iter_opts["optimization"]["jac"](vars_free, objfun_args)
+                            t_jac = time.time()
+                            iter_opts["optimization"]["jac"](vars_free, objfun_args)
+                            print(f"Jacobian evaluation took {time.time() - t_jac}s")
+
+                    min_result: OptimizeResult = least_squares(objective_function(iter_opts),
+                                                               vars_free,
+                                                               args=[objfun_args],
+                                                               **optim_args,
+                                                               **iter_opts["optimization"]
+                                                               )
+                    cost.append(np.sum(objective_function(iter_opts)(min_result.x, objfun_args) ** 2) / 2)
+                    positions_init[i_fr], oris_flu_init[i_fr] = unravel_vars(min_result.x, objfun_args)[1:3]
+                    print(".", end="")
+                    sys.stdout.flush()
+                print()
             else:
-                positions_init_iter = None
-                positions_init = np.full((len(error_mask), 3), np.nan)
-            if oris_flu_init is not None:
-                oris_flu_init_iter = oris_flu_init[error_mask]
-            else:
-                oris_flu_init_iter = None
-                oris_flu_init = np.full((len(error_mask), 3), np.nan)
-            vars_free, objfun_args, optim_args = make_optim_input(calibs, iter_opts,
-                                                                  landmarks_init,
-                                                                  positions_init_iter, oris_flu_init_iter,
-                                                                  optimize=opt, landmarks_optimize=landmarks_optimize,
-                                                                  landmarks_far=landmarks_far,
-                                                                  precalc=precalc,
-                                                                  landmark_imcoords=landmark_imcoords[:, error_mask],
-                                                                  landmark_vecs=landmark_vecs[:, error_mask])
-
-            min_result: OptimizeResult = least_squares(objective_function(iter_opts),
-                                                       vars_free,
-                                                       args=[objfun_args],
-                                                       **optim_args,
-                                                       **iter_opts["optimization"]
-                                                       )
-
-            (landmarks_init, positions_init[error_mask], oris_flu_init[error_mask],
-             cam_rotvecs, cam_ts) = unravel_vars(min_result.x, objfun_args)
-
-            calibs = update_calibs_extrinsics(calibs, cam_rotvecs, cam_ts)
-
-            # Normalize e.g. too long vectors from multiple revolutions
-            oris_flu_init = R.from_rotvec(oris_flu_init).as_rotvec()
-            max_pos_shift = np.nanmax(np.linalg.norm((positions_prev - positions_init), axis=-1))
-            positions_prev = positions_init
-
-            print(f"Max pos shift {max_pos_shift}")
-
-        if iter_opts["optimize_single_frames"]:
-            print(f"Optimizing single frames")
-            for i_fr in range(len(positions_init)):
-                # Run optimization
+                print(f"Optimizing {opt} - Joined")
                 vars_free, objfun_args, optim_args = make_optim_input(calibs, iter_opts,
-                                                                      landmarks_init,
-                                                                      positions_init[(i_fr,),], oris_flu_init[(i_fr,),],
-                                                                      optimize=["positions", "oris"],
+                                                                      landmarks_init, positions_init, oris_flu_init,
+                                                                      optimize=opt,
                                                                       landmarks_optimize=landmarks_optimize,
                                                                       landmarks_far=landmarks_far,
                                                                       precalc=precalc,
-                                                                      landmark_imcoords=landmark_imcoords[:, (i_fr,), ],
-                                                                      landmark_vecs=landmark_vecs[:, (i_fr,), ])
+                                                                      landmark_imcoords=landmark_imcoords,
+                                                                      landmark_vecs=landmark_vecs)
+
+                error = objective_function(iter_opts)(vars_free, objfun_args)
+                t_objfun = time.time()
+                objective_function(iter_opts)(vars_free, objfun_args)
+                print(f"Objective function evaluation took {time.time() - t_objfun}s")
+                cost_pre = np.sum(error ** 2) / 2
+
+                if not isinstance(iter_opts["optimization"]["jac"], str):
+                    iter_opts["optimization"]["jac"](vars_free, objfun_args)
+                    t_jac = time.time()
+                    iter_opts["optimization"]["jac"](vars_free, objfun_args)
+                    print(f"Jacobian evaluation took {time.time() - t_jac}s")
 
                 min_result: OptimizeResult = least_squares(objective_function(iter_opts),
                                                            vars_free,
@@ -131,24 +133,28 @@ def infer_position_attitude(times, calibs, opts,
                                                            **optim_args,
                                                            **iter_opts["optimization"]
                                                            )
+                cost = np.sum(objective_function(iter_opts)(min_result.x, objfun_args) ** 2) / 2
 
-                landmarks_init, positions_init[i_fr], oris_flu_init[i_fr] = unravel_vars(min_result.x, objfun_args)[:3]
-                # Normalize e.g. too long vectors from multiple revolutions
+                landmarks_init, positions_init, oris_flu_init, cam_rotvecs, cam_ts = unravel_vars(min_result.x,
+                                                                                                  objfun_args)
+                calibs = update_calibs_extrinsics(calibs, cam_rotvecs, cam_ts)
 
+            # Normalize e.g. too long vectors from multiple revolutions
             oris_flu_init = R.from_rotvec(oris_flu_init).as_rotvec()
-            max_pos_shift = np.nanmax(np.linalg.norm((positions_prev - positions_init), axis=-1))
 
+            # Calculate and display position shift
+            max_pos_shift = np.nanmax(np.linalg.norm((positions_prev - positions_init), axis=-1))
+            positions_prev = positions_init
             print(f"Max pos shift {max_pos_shift}")
 
-        if iter_opts["realign_by_distant_features"]:
-            print("realign_by_distant_features")
-            oris_flu_init = realign_by_distant_features(landmarks_init, landmark_imcoords, times,
-                                                        positions_init, R.from_rotvec(oris_flu_init),
-                                                        calibs).as_rotvec()
-    print(f"Optimization took {time.time() - t} s")
+            print("Cost reduced to ", np.sum(np.array(cost)), " from ", np.sum(np.array(cost_pre)))
 
+    if iter_opts["realign_by_distant_features"]:
+        print("realign_by_distant_features")
+        oris_flu_init = realign_by_distant_features(landmarks_init, landmark_imcoords, times,
+                                                    positions_init, R.from_rotvec(oris_flu_init),
+                                                    calibs).as_rotvec()
 
+    print(f"Optimization took {time.time() - t} s, ")
 
     return landmarks_init, positions_init, oris_flu_init, calibs
-
-
