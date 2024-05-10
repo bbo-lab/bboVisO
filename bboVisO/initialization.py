@@ -241,9 +241,9 @@ def get_precalc(opts):
             'objfunc_repro': jit(viso_ag.objfun_repro, backend=opts["jax_backend"]),
             'jacobians_repro': [jit(jacobian(viso_ag.objfun_repro, i_var), backend=opts["jax_backend"])
                                 for i_var in range(5)],
-            'objfunc_angular': jit(viso_ag.objfun_angular, backend=opts["jax_backend"]),
+            'objfunc_angular': jit(viso_ag.objfun_angular),  # , backend=opts["jax_backend"]),
             'jacobians_angular': [jit(jacobian(viso_ag.objfun_angular, i_var), backend=opts["jax_backend"])
-                                  for i_var in range(4)],
+                                  for i_var in range(5)],
             # 'objfunc_3d': jit(viso_ag.objfun_3d, backend=opts["jax_backend"]),
             # 'jacobians_3d': [jit(jacobian(viso_ag.objfun_3d, i_var), backend=opts["jax_backend"])
             #                  for i_var in range(3)],

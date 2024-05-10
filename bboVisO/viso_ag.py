@@ -51,7 +51,11 @@ def objfun_repro(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_i
     return errors2d
 
 
-def objfun_angular(landmarks, positions, oris_flu, cam_positions, landmark_vecs, lm_close_pen_weight, debug=False):
+def objfun_angular(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_vecs, lm_close_pen_weight, debug=False):
+    cam_positions = -np.einsum('nim,ni->nm', rodrigues_as_rotmats(cam_rotvecs), cam_ts)
+
+    # print(cam_positions)
+
     cam_frame_positions = cam_positions[:,np.newaxis] + positions[np.newaxis]
     pl_vecs = landmarks[np.newaxis, np.newaxis] - cam_frame_positions[:, :, np.newaxis]
     pl_vecs /= np.linalg.norm(pl_vecs, axis=-1, keepdims=True)
