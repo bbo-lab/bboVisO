@@ -9,8 +9,9 @@ from bboVisO.unravel import unravel_vars, unpack_calibs
 
 def objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs, opts) -> np.ndarray:
     cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(calibs)
-    errors2d = np.array(viso_ag.objfun_repro(landmarks, positions, oris_flu, cam_Rs, cam_ts, landmark_imcoords, cam_matrices, ks,
-                                    xis, opts["lm_close_pen_weight"], True))
+    errors2d = np.array(viso_ag.objfun_repro(landmarks, positions, oris_flu, R.from_matrix(cam_Rs).as_rotvec(), cam_ts,
+                                             landmark_imcoords, cam_matrices, ks, xis,
+                                             opts["lm_close_pen_weight"], True))
 
     return errors2d
 
@@ -36,6 +37,10 @@ def objfun_repro_jacobian_wrapper(free_vars, args) -> np.ndarray:
                                                                                                            args)
     result_shape = landmark_imcoords.shape
 
+    # print("landmarks", landmarks.shape)
+    # print("positions", positions.shape)
+    # print("landmark_imcoords", landmark_imcoords.shape)
+
     # TODO (minor speed) Do not calculate Jacobian if there are no related free variables
     obj_fcn_jacobian = [
         np.array(
@@ -47,6 +52,8 @@ def objfun_repro_jacobian_wrapper(free_vars, args) -> np.ndarray:
         for j in args['precalc']['jacobians_repro']
     ]
 
+    # print([j.shape for j in obj_fcn_jacobian])
+
     # for i, jac in enumerate(obj_fcn_jacobian):
     #     print(f"Jacobian {i} norm: {np.linalg.norm(jac)}")
 
@@ -55,7 +62,7 @@ def objfun_repro_jacobian_wrapper(free_vars, args) -> np.ndarray:
         obj_fcn_jacobian,
         axis=4)
 
-    print("obj_fcn_jacobian", obj_fcn_jacobian.shape)
+    # print("obj_fcn_jacobian", obj_fcn_jacobian.shape)
 
     # Ravel variable dimension
     obj_fcn_jacobian = obj_fcn_jacobian.reshape((np.product(result_shape), args['mask_opt'].size))
@@ -94,11 +101,11 @@ def make_jacobian_sparsity_mask_repro(m, k, n, mask_free_input):
 
 def unravel_vars_repro(free_vars, args):
     landmark_imcoords = args["landmark_imcoords"]
-    cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(args["calibs"])
+    cam_matrices, ks, xis, cam_rotvecs, cam_ts = unpack_calibs(args["calibs"])
     lm_close_pen_weight = args["lm_close_pen_weight"]
 
     landmarks, positions, oris_flu, camera_rotations, camera_translations = unravel_vars(free_vars, args)
     world2cam_trafo = RigidTransform(rotation=R.from_rotvec(camera_rotations), translation=camera_translations).inv()
-    cam_Rs = world2cam_trafo.get_rotation().as_matrix()
+    cam_rotvecs = world2cam_trafo.get_rotation().as_rotvec()
     cam_ts = world2cam_trafo.get_translation()
-    return landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight
+    return landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_rotvecs, cam_ts, lm_close_pen_weight

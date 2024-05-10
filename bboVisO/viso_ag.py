@@ -4,7 +4,7 @@ import calibcam.camfunctions_ag as camfuncs_ag
 
 
 # TODO initialize attitude with lowest variance vecs
-def objfun_repro(landmarks, positions, oris_flu, cam_Rs, cam_ts, landmark_imcoords, cam_matrices, ks, xis,
+def objfun_repro(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoords, cam_matrices, ks, xis,
                  lm_close_pen_weight, debug=False):
     # Generate landmark positions relative to camera system
     if debug:
@@ -18,8 +18,8 @@ def objfun_repro(landmarks, positions, oris_flu, cam_Rs, cam_ts, landmark_imcoor
     # Generate landmark positions relative to camera system
     landmark_coords = camfuncs_ag.map_world_board_to_cams(
         landmark_vecs,
-        cam_Rs.reshape((cam_Rs.shape[0], 1, 1, 3, 3)),
-        cam_ts.reshape((cam_Rs.shape[0], 1, 1, 3))
+        rodrigues_as_rotmats(cam_rotvecs).reshape((cam_rotvecs.shape[0], 1, 1, 3, 3)),
+        cam_ts.reshape((cam_rotvecs.shape[0], 1, 1, 3))
     )
 
     # print("X_cam_2: ", landmark_coords.shape, landmark_coords[3])
