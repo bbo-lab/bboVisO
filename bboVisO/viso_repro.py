@@ -17,13 +17,12 @@ def objfun_repro_runner(landmarks, positions, oris_flu, landmark_imcoords, calib
 
 
 def objfun_repro_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
-    landmarks, positions, oris_flu, \
-        landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight = unravel_vars_repro(free_vars,
-                                                                                                           args)
+    (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
+     landmark_imcoords, cam_matrices, ks, xis, lm_close_pen_weight) = unravel_vars_repro(free_vars, args)
 
-    errors2d = np.array(args['precalc']['objfunc_repro'](landmarks, positions, oris_flu, cam_Rs, cam_ts,
-                                                landmark_imcoords, cam_matrices, ks, xis,
-                                                lm_close_pen_weight))
+    errors2d = np.array(args['precalc']['objfunc_repro'](landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
+                                                         landmark_imcoords, cam_matrices, ks, xis,
+                                                         lm_close_pen_weight))
     if no_ravel:
         return errors2d
     else:
@@ -32,9 +31,8 @@ def objfun_repro_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
 
 
 def objfun_repro_jacobian_wrapper(free_vars, args) -> np.ndarray:
-    landmarks, positions, oris_flu, \
-        landmark_imcoords, cam_matrices, ks, xis, cam_Rs, cam_ts, lm_close_pen_weight = unravel_vars_repro(free_vars,
-                                                                                                           args)
+    (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
+     landmark_imcoords, cam_matrices, ks, xis, lm_close_pen_weight) = unravel_vars_repro(free_vars, args)
     result_shape = landmark_imcoords.shape
 
     # print("landmarks", landmarks.shape)
@@ -45,7 +43,7 @@ def objfun_repro_jacobian_wrapper(free_vars, args) -> np.ndarray:
     obj_fcn_jacobian = [
         np.array(
             # Ravel over input dimensions
-            j(landmarks, positions, oris_flu, cam_Rs, cam_ts, landmark_imcoords, cam_matrices, ks, xis,
+            j(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoords, cam_matrices, ks, xis,
               lm_close_pen_weight).reshape(
                 result_shape + (-1,))
         )
@@ -100,12 +98,10 @@ def make_jacobian_sparsity_mask_repro(m, k, n, mask_free_input):
 
 
 def unravel_vars_repro(free_vars, args):
-    landmark_imcoords = args["landmark_imcoords"]
-    cam_matrices, ks, xis, cam_rotvecs, cam_ts = unpack_calibs(args["calibs"])
-    lm_close_pen_weight = args["lm_close_pen_weight"]
+    landmarks, positions, oris_flu, cam_rotvecs, cam_ts = unravel_vars(free_vars, args)
 
-    landmarks, positions, oris_flu, camera_rotations, camera_translations = unravel_vars(free_vars, args)
-    world2cam_trafo = RigidTransform(rotation=R.from_rotvec(camera_rotations), translation=camera_translations).inv()
-    cam_rotvecs = world2cam_trafo.get_rotation().as_rotvec()
-    cam_ts = world2cam_trafo.get_translation()
-    return landmarks, positions, oris_flu, landmark_imcoords, cam_matrices, ks, xis, cam_rotvecs, cam_ts, lm_close_pen_weight
+    landmark_imcoords = args["landmark_imcoords"]
+    cam_matrices, ks, xis = unpack_calibs(args["calibs"])[:3]
+    lm_close_pen_weight = args["lm_close_pen_weight"]
+    return (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
+            landmark_imcoords, cam_matrices, ks, xis, lm_close_pen_weight)

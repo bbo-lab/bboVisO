@@ -1,22 +1,29 @@
 import numpy as np
+
+from scipy.spatial.transform import Rotation as R
+from bbo.geometry import RigidTransform
 # from scipy.sparse import block_diag
 
 from bboVisO import viso_ag as viso_ag
 from bboVisO.unravel import unravel_vars
 
 
-def objfun_angular_runner(landmarks, positions, oris_flu, landmark_vecs, opts) -> np.ndarray:
-    errors2d = viso_ag.objfun_angular(landmarks, positions, oris_flu, opts["camera_positions"], landmark_vecs,
-                                      opts["lm_close_pen_weight"], True)
-
-    return np.nansum(errors2d, axis=0)
+# def objfun_angular_runner(landmarks, positions, oris_flu, landmark_vecs, opts) -> np.ndarray:
+#     errors2d = viso_ag.objfun_angular(landmarks, positions, oris_flu, opts["camera_positions"], landmark_vecs,
+#                                       opts["lm_close_pen_weight"], True)
+#
+#     return np.nansum(errors2d, axis=0)
 
 
 def objfun_angular_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
-    landmarks, positions, oris_flu, landmark_vecs, cam_positions, lm_close_pen_weight = unravel_vars_angular(free_vars,
-                                                                                                             args)
+    (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
+     landmark_vecs, lm_close_pen_weight) = unravel_vars_angular(free_vars, args)
 
-    errors_angular = np.array(args['precalc']['objfunc_angular'](landmarks, positions, oris_flu, cam_positions,
+    world2cam_trafo = RigidTransform(rotation=R.from_rotvec(cam_rotvecs), translation=cam_ts).inv()
+    cam_rotvecs = world2cam_trafo.get_rotation().as_rotvec()
+    cam_ts = world2cam_trafo.get_translation()
+
+    errors_angular = np.array(args['precalc']['objfunc_angular'](landmarks, positions, oris_flu, cam_ts,
                                                                  landmark_vecs, lm_close_pen_weight))
 
     if no_ravel:
@@ -90,8 +97,10 @@ def make_jacobian_sparsity_mask_angular(m, k, n, mask_free_input):
 
 
 def unravel_vars_angular(free_vars, args):
+    landmarks, positions, oris_flu, cam_rotvecs, cam_ts = unravel_vars(free_vars, args)
+
     landmark_vecs = args["landmark_vecs"]
     lm_close_pen_weight = args["lm_close_pen_weight"]
 
-    landmarks, positions, oris_flu, cam_rotations, cam_translations = unravel_vars(free_vars, args)
-    return landmarks, positions, oris_flu, landmark_vecs, cam_translations, lm_close_pen_weight
+    return (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
+            landmark_vecs, lm_close_pen_weight)

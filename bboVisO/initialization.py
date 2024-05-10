@@ -147,10 +147,8 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
                 frame_landmark_vectors[common_mask], landmark_vectors_sphere[i][common_mask]
             )[0].as_rotvec()
 
-    cam_trafo = RigidTransform(rotation=R.from_rotvec([c["rvec_cam"] for c in calibs]),
-                               translation=np.array([c["tvec_cam"] for c in calibs]))
-    extrinsics_rotations_init = cam_trafo.inv().get_rotation().as_rotvec()
-    extrinsics_translations_init = cam_trafo.inv().get_translation()
+    extrinsics_rotations_init = np.array([c["rvec_cam"] for c in calibs])
+    extrinsics_translations_init = np.array([c["tvec_cam"] for c in calibs])
 
     # Fill nan landmarks as good as possible
     for lm_idx, lm in enumerate(landmarks_init):

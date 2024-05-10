@@ -129,10 +129,9 @@ def landmark_imcoords_from_vecs(landmark_vecs, calibs):
     landmark_imcoords = cs.project_dir(landmark_vecs)
     return landmark_imcoords
 
-def update_calibs_extrinsics(calibs, camera_positions, camera_rotations):
-    world2cam_trafo = RigidTransform(rotation=R.from_rotvec(camera_rotations), translation=camera_positions).inv()
+def update_calibs_extrinsics(calibs, cam_rotvecs, cam_ts):
     for i_c, c in enumerate(calibs):
-        c["rvec_cam"] = world2cam_trafo[i_c].get_rotation().as_rotvec().reshape((3,))
-        c["tvec_cam"] = world2cam_trafo[i_c].get_translation().reshape((3,))
+        c["rvec_cam"] = cam_rotvecs[i_c]
+        c["tvec_cam"] = cam_ts[i_c]
 
     return calibs

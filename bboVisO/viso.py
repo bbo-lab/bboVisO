@@ -100,9 +100,9 @@ def infer_position_attitude(times, calibs, opts,
                                                        )
 
             (landmarks_init, positions_init[error_mask], oris_flu_init[error_mask],
-             cam_rotations, camera_positions) = unravel_vars(min_result.x, objfun_args)
+             cam_rotvecs, cam_ts) = unravel_vars(min_result.x, objfun_args)
 
-            calibs = update_calibs_extrinsics(calibs, camera_positions, cam_rotations)
+            calibs = update_calibs_extrinsics(calibs, cam_rotvecs, cam_ts)
 
             # Normalize e.g. too long vectors from multiple revolutions
             oris_flu_init = R.from_rotvec(oris_flu_init).as_rotvec()
