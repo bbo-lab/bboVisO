@@ -2,10 +2,9 @@ import numpy as np
 from calibcamlib.camerasystem import Camerasystem
 from scipy.interpolate import interp1d
 from scipy.spatial.transform import Rotation as R, Slerp
-from bbo.geometry import RigidTransform
 
 from bboVisO.helper import generate_immediate_neighbor_mask
-from bboVisO.viso_repro import objfun_repro_runner
+from bboVisO.methods.repro.optfuncs import objfun_runner as objfun_runner_repro
 
 
 def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, optimize,
@@ -14,7 +13,7 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
     if opts['interpolate_high_error'] == 0 or opts['interpolate_high_error'] == -1:
         return positions, oris_flu
 
-    objfun_error = objfun_repro_runner(landmarks, positions, oris_flu,
+    objfun_error = objfun_runner_repro(landmarks, positions, oris_flu,
                                        landmark_imcoords, calibs, opts)
     abserrors = np.sqrt(np.nansum(objfun_error ** 2, axis=-1))
     abserrors[abserrors == 0] = np.nan
@@ -36,7 +35,7 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
     positions_interp, oris_flu_interp = interpolate_mask(times, positions, R.from_rotvec(oris_flu), low_error_mask)
     oris_flu_interp = oris_flu_interp.as_rotvec()
 
-    objfun_error_interp = objfun_repro_runner(
+    objfun_error_interp = objfun_runner_repro(
         landmarks, positions_interp, oris_flu_interp, landmark_imcoords, calibs, opts
     )
     abserrors_interp = np.sqrt(np.nansum(objfun_error_interp ** 2, axis=-1))

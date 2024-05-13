@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 def check_jacobian(jac, fun, x, args, eps=1e-6):
     j = jac(x, args)
     # Compute the Jacobian numerically using finite differences
-    jac_num = calc_2point_jacobian(fun, eps, x, args)
+    jac_num = calc_2point_jacobian(fun, x, eps, args)
 
     k = args["landmark_imcoords"].shape[1]
     n = args["landmark_imcoords"].shape[2]
@@ -41,7 +41,7 @@ def check_jacobian(jac, fun, x, args, eps=1e-6):
     return np.linalg.norm(jac_num - j) / np.linalg.norm(jac_num)
 
 
-def calc_2point_jacobian(fun, eps, x, *args, **kwargs):
+def calc_2point_jacobian(fun, x, eps=np.sqrt(np.finfo(float).eps), *args, **kwargs):
     j_shape = fun(x, *args, **kwargs).shape + x.shape
     jac_num = np.zeros(j_shape)
 

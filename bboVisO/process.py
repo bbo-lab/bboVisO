@@ -1,20 +1,16 @@
-import time
-
-import jax.config
+import jax
 import numpy as np
-from scipy.spatial.transform import Rotation as R
 
 import bboVisO.viso as viso
-import bboVisO.viso_repro
-from bboVisO import opts
+import bboVisO.methods.repro
 
-from bboVisO.helper import (landmarks_to_array, realign_by_distant_features)
-from bboVisO.interpolation import interpolate_imcoords, interpolate_imcoords_rebase
+from bboVisO.helper import (landmarks_to_array)
+from bboVisO.interpolation import interpolate_imcoords
 
 from bbo import label_lib
 
 # single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!
-# jax.config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
 
 # Some debug output
 viso.debug = True
@@ -137,8 +133,8 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
 
-    error_repro = bboVisO.viso_repro.objfun_repro_runner(landmarks_opt[landmarks_mask], positions_opt,
-                                                         oris_flu_opt, landmark_imcoords[:, :, landmarks_mask], calibs, opts["iterations"][-1])
+    error_repro = bboVisO.methods.repro.optfuncs.objfun_runner(landmarks_opt[landmarks_mask], positions_opt,
+                                                                            oris_flu_opt, landmark_imcoords[:, :, landmarks_mask], calibs, opts["iterations"][-1])
     error_repro[error_repro == 0] = np.nan
     print(f"Optimized repro cost: {0.5 * np.sum(error_repro ** 2)}")
 

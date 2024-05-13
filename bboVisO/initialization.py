@@ -1,9 +1,11 @@
 import numpy as np
+
+import bboVisO.methods.angular.optfuncs_ag
+import bboVisO.methods.repro.optfuncs_ag
 from calibcamlib.helper import intersect
 from jax import jit, jacfwd as jacobian
 from scipy.spatial.transform import Rotation as R
 
-from bboVisO import viso_ag as viso_ag
 from bboVisO.geometry import build_vector_bundle
 from bboVisO.helper import landmark_vecs_from_imcoords, landmark_imcoords_from_vecs
 from bboVisO.method_switches import make_jacobian_sparsity_mask
@@ -59,9 +61,9 @@ def fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs):
     assert landmark_imcoords is not None or landmark_vecs is not None, \
         "landmark_imcoords or landmark_vecs must be given"
     if landmark_imcoords is None:
-        landmark_vecs = landmark_vecs_from_imcoords(landmark_imcoords, calibs)
-    if landmark_vecs is None:
         landmark_imcoords = landmark_imcoords_from_vecs(landmark_vecs, calibs)
+    if landmark_vecs is None:
+        landmark_vecs = landmark_vecs_from_imcoords(landmark_imcoords, calibs)
     return landmark_imcoords, landmark_vecs
 
 
@@ -238,11 +240,11 @@ def get_precalc(opts):
     if precalc_lazy is None:
         print(opts["jax_backend"])
         precalc_lazy = {
-            'objfunc_repro': jit(viso_ag.objfun_repro, backend=opts["jax_backend"]),
-            'jacobians_repro': [jit(jacobian(viso_ag.objfun_repro, i_var), backend=opts["jax_backend"])
+            'objfunc_repro': jit(bboVisO.methods.repro.optfuncs_ag.objfun, backend=opts["jax_backend"]),
+            'jacobians_repro': [jit(jacobian(bboVisO.methods.repro.optfuncs_ag.objfun, i_var), backend=opts["jax_backend"])
                                 for i_var in range(5)],
-            'objfunc_angular': jit(viso_ag.objfun_angular),  # , backend=opts["jax_backend"]),
-            'jacobians_angular': [jit(jacobian(viso_ag.objfun_angular, i_var), backend=opts["jax_backend"])
+            'objfunc_angular': jit(bboVisO.methods.angular.optfuncs_ag.objfun),  # , backend=opts["jax_backend"]),
+            'jacobians_angular': [jit(jacobian(bboVisO.methods.angular.optfuncs_ag.objfun, i_var), backend=opts["jax_backend"])
                                   for i_var in range(5)],
             # 'objfunc_3d': jit(viso_ag.objfun_3d, backend=opts["jax_backend"]),
             # 'jacobians_3d': [jit(jacobian(viso_ag.objfun_3d, i_var), backend=opts["jax_backend"])

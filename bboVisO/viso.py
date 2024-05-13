@@ -5,10 +5,11 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from scipy.optimize import least_squares, OptimizeResult
 
+import bboVisO
 from bboVisO.helper import realign_by_distant_features, update_calibs_extrinsics
 from bboVisO.initialization import make_optim_input, fill_landmark_imcoords_vecs, get_precalc
 from bboVisO.interpolation import interpolate_high_error, interpolate_close_marker
-from bboVisO.method_switches import objective_function, jacobian_function
+from bboVisO.method_switches import objective_function, jacobian_function, make_jacobian_sparsity_mask
 from bboVisO.unravel import unravel_vars
 
 debug = False
@@ -90,7 +91,7 @@ def infer_position_attitude(times, calibs, opts,
                         if not isinstance(iter_opts["optimization"]["jac"], str):
                             iter_opts["optimization"]["jac"](vars_free, objfun_args)
                             t_jac = time.time()
-                            iter_opts["optimization"]["jac"](vars_free, objfun_args)
+                            jacobian = iter_opts["optimization"]["jac"](vars_free, objfun_args)
                             print(f"Jacobian evaluation took {time.time() - t_jac}s")
 
                     min_result: OptimizeResult = least_squares(objective_function(iter_opts),
@@ -124,8 +125,20 @@ def infer_position_attitude(times, calibs, opts,
                 if not isinstance(iter_opts["optimization"]["jac"], str):
                     iter_opts["optimization"]["jac"](vars_free, objfun_args)
                     t_jac = time.time()
-                    iter_opts["optimization"]["jac"](vars_free, objfun_args)
+                    jacobian = iter_opts["optimization"]["jac"](vars_free, objfun_args)
                     print(f"Jacobian evaluation took {time.time() - t_jac}s")
+
+                    import matplotlib
+                    import matplotlib.pyplot as plt
+                    sparsity = make_jacobian_sparsity_mask(iter_opts)(*landmark_imcoords.shape[:3], objfun_args["mask_opt"])
+                    matplotlib.use('Agg')
+                    fig, axes = plt.subplots(1,3)
+                    axes[0].imshow(jacobian > 0)
+                    axes[1].imshow(sparsity)
+                    axes[2].imshow(~sparsity & (jacobian > 0))
+                    print("JACOBIAN: ", jacobian.shape)
+                    fig.savefig(f"/home/voit/tmp/jacobian_{i_iter}_{i_opti}.svg")
+                    plt.close()
 
                 min_result: OptimizeResult = least_squares(objective_function(iter_opts),
                                                            vars_free,

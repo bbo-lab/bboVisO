@@ -8,8 +8,8 @@ from calibcamlib.camerasystem import Camerasystem
 
 import bboVisO.alignment
 import bboVisO.initialization
-import bboVisO.viso_3derr
-import bboVisO.viso_repro
+import bboVisO.methods.viso_3derr.optfuncs
+import bboVisO.methods.repro
 from bboVisO import viso as viso
 
 
@@ -43,13 +43,13 @@ def get_simulated_data(calibs, opts,
     vars_free_opt, args_opt = bboVisO.initialization.make_optim_input(calibs, opts, landmarks, positions,
                                                                       oris_flu.as_rotvec(),
                                                                       landmark_imcoords=landmark_imcoords_perturbed)[0:2]
-    error_repro = bboVisO.viso_repro.objfun_repro_wrapper(vars_free_opt, args_opt)
-    error_3d_repro = bboVisO.viso_3derr.objfun_3d_wrapper(vars_free_opt, args_opt)
+    error_repro = bboVisO.methods.viso_repro.viso_repro.objfun_repro_wrapper(vars_free_opt, args_opt)
+    error_3d_repro = bboVisO.methods.viso_3derr.viso_3derr.objfun_3d_wrapper(vars_free_opt, args_opt)
 
     vars_free_opt, args_opt = bboVisO.initialization.make_optim_input(calibs, opts, landmarks, positions,
                                                                       oris_flu.as_rotvec(),
                                                                       landmark_vecs=landmark_vecs_perturbed)[0:2]
-    error_3d = bboVisO.viso_3derr.objfun_3d_wrapper(vars_free_opt, args_opt)
+    error_3d = bboVisO.methods.viso_3derr.viso_3derr.objfun_3d_wrapper(vars_free_opt, args_opt)
 
     cost = 0.5 * np.sum(error_repro ** 2)
     print(f"Ground truth repro cost: {cost}")
@@ -292,7 +292,7 @@ def run_simulated_data(opts, pertubation_deg=0.4, landmark_radius=50):
                                                                       oris_flu_opt,
                                                                       landmark_imcoords=landmark_imcoords,
                                                                       )[0:2]
-    error_repro = bboVisO.viso_repro.objfun_repro_wrapper(vars_free_opt, args_opt)
+    error_repro = bboVisO.methods.viso_repro.viso_repro.objfun_repro_wrapper(vars_free_opt, args_opt)
     cost_final = 0.5 * np.sum(error_repro ** 2)
     print(f"Optimized repro cost: {cost_final}")
     print(f"Optimized cost debts: {cost_final - cost_gt}")

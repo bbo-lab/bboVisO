@@ -125,7 +125,7 @@ def landmark_vecs_from_imcoords(landmark_imcoords, calibs):
 
 def landmark_imcoords_from_vecs(landmark_vecs, calibs):
     cs = Camerasystem.from_calibs(calibs)
-    raise Exception("This needs to be reimplemented taking into account camera positions")
+    # raise Exception("This needs to be reimplemented taking into account camera positions")
     landmark_imcoords = cs.project_dir(landmark_vecs)
     return landmark_imcoords
 

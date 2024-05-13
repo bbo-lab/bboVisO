@@ -1,35 +1,29 @@
 import numpy as np
 
-from scipy.spatial.transform import Rotation as R
-from bbo.geometry import RigidTransform
-# from scipy.sparse import block_diag
+from bboVisO.unravel import unravel_vars as unravel_vars_base
 
-from bboVisO import viso_ag as viso_ag
-from bboVisO.unravel import unravel_vars
-
-
-def objfun_angular_runner(landmarks, positions, oris_flu, landmark_vecs, opts) -> np.ndarray:
-    #     errors2d = viso_ag.objfun_angular(landmarks, positions, oris_flu, opts["camera_positions"], landmark_vecs,
+def objfun_runner(landmarks, positions, oris_flu, landmark_vecs, opts) -> np.ndarray:
+    #     errors2d = viso_ag.objfun(landmarks, positions, oris_flu, opts["camera_positions"], landmark_vecs,
     #                                       opts["lm_close_pen_weight"], True)
     #
     #     return np.nansum(errors2d, axis=0)
     return np.array([])
 
 
-def objfun_angular_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
-    obfun_inputs = unravel_vars_angular(free_vars, args)
-    errors_angular = np.array(args['precalc']['objfunc_angular'](*obfun_inputs))
+def objfun_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
+    obfun_inputs = unravel_vars(free_vars, args)
+    errors = np.array(args['precalc']['objfunc_angular'](*obfun_inputs))
 
     if no_ravel:
-        return errors_angular
+        return errors
     else:
-        errors_angular[np.isnan(errors_angular)] = 0
-        return errors_angular.ravel()
+        errors[np.isnan(errors)] = 0
+        return errors.ravel()
 
 
-def objfun_angular_jacobian_wrapper(free_vars, args) -> np.ndarray:
+def objfun_jacobian_wrapper(free_vars, args) -> np.ndarray:
     (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
-     landmark_vecs, lm_close_pen_weight) = unravel_vars_angular(free_vars, args)
+     landmark_vecs, lm_close_pen_weight) = unravel_vars(free_vars, args)
     result_shape = landmark_vecs.shape[:-1] + (1,)
 
     # TODO (minor speed) Do not calculate Jacobian if there are no related free variables
@@ -59,20 +53,20 @@ def objfun_angular_jacobian_wrapper(free_vars, args) -> np.ndarray:
     return obj_fcn_jacobian
 
 
-def make_jacobian_sparsity_mask_angular(m, k, n, mask_free_input):
+def make_jacobian_sparsity_mask(m, k, n, mask_free_input):
     d = 1  # Output dimension, angle
     # TODO: Make sparse matrix
-    jac_sparsity_lm = np.zeros((m, d, k, n) + (n, 3), dtype=bool)
+    jac_sparsity_lm = np.zeros((m, k, n, d) + (n, 3), dtype=bool)
     for i_n in range(n):
-        jac_sparsity_lm[:, :, :, i_n, i_n] = True
+        jac_sparsity_lm[:, :, i_n, :, i_n] = True
     jac_sparsity_lm = jac_sparsity_lm.reshape((m * d * k * n, -1))
 
-    jac_sparsity_pos_rot = np.zeros((m, d, k, n) + (k, 3), dtype=bool)
+    jac_sparsity_pos_rot = np.zeros((m, k, n, d) + (k, 3), dtype=bool)
     for i_k in range(k):
-        jac_sparsity_pos_rot[:, :, i_k, :, i_k] = True
+        jac_sparsity_pos_rot[:, i_k, :, :, i_k] = True
     jac_sparsity_pos_rot = jac_sparsity_pos_rot.reshape((m * d * k * n, -1))
 
-    jac_sparsity_cam_pos_rot = np.ones((m, d, k, n) + (m, 3), dtype=bool)
+    jac_sparsity_cam_pos_rot = np.ones((m, k, n, d) + (m, 3), dtype=bool)
     jac_sparsity_cam_pos_rot = jac_sparsity_cam_pos_rot.reshape((m * d * k * n, -1))
 
     jac_sparsity = np.hstack((jac_sparsity_lm,
@@ -82,12 +76,12 @@ def make_jacobian_sparsity_mask_angular(m, k, n, mask_free_input):
                               jac_sparsity_cam_pos_rot,
                               ))
 
-    jac_sparsity[:] = True  # Until this gives the same result ...
+    # jac_sparsity[:] = True  # Until this gives the same result ...
     return jac_sparsity[:, mask_free_input]
 
 
-def unravel_vars_angular(free_vars, args):
-    landmarks, positions, oris_flu, cam_rotvecs, cam_ts = unravel_vars(free_vars, args)
+def unravel_vars(free_vars, args):
+    landmarks, positions, oris_flu, cam_rotvecs, cam_ts = unravel_vars_base(free_vars, args)
 
     landmark_vecs = args["landmark_vecs"]
     lm_close_pen_weight = args["lm_close_pen_weight"]

@@ -2,7 +2,7 @@ import os
 import sys
 
 import bboVisO.initialization
-import bboVisO.viso_repro
+import bboVisO.methods.repro
 
 sys.path.insert(0, os.path.dirname(__file__) + "/..")
 
@@ -11,7 +11,6 @@ from .viso_test_case import VisOTestCase
 
 import numpy as np
 from bboVisO.test import check_jacobian, calc_2point_jacobian
-import bboVisO.viso as viso
 from jax import jacfwd as jacobian
 from jax import jit
 
@@ -30,7 +29,7 @@ class TestJacobianReproClass(VisOTestCase):
         vars_free_opt = np.where(vars_free == 0, 1e-10, vars_free)
 
         print(f"Jacobian check"
-              f"{check_jacobian(bboVisO.viso_repro.objfun_repro_jacobian_wrapper, bboVisO.viso_repro.objfun_repro_wrapper, vars_free, obfun_args)}")
+              f"{check_jacobian(bboVisO.methods.viso_repro.viso_repro.objfun_repro_jacobian_wrapper, bboVisO.methods.viso_repro.viso_repro.objfun_repro_wrapper, vars_free, obfun_args)}")
 
     def off_test_rodrigues_as_rotmats_jacobian_zero(self):
         np.random.seed(0)
@@ -39,7 +38,7 @@ class TestJacobianReproClass(VisOTestCase):
         rot_vecs = np.zeros((2, 3))
         # rot_vecs = np.where(rot_vecs == 0, 1e-10, rot_vecs)
 
-        j_num = calc_2point_jacobian(jit(calibcam.helper_ag.rodrigues_as_rotmats), 1e-6, rot_vecs)
+        j_num = calc_2point_jacobian(jit(calibcam.helper_ag.rodrigues_as_rotmats), rot_vecs, 1e-6)
         j = jacobian(calibcam.helper_ag.rodrigues_as_rotmats)(rot_vecs)
 
         plt.figure(figsize=(18, 9))
@@ -69,7 +68,7 @@ class TestJacobianReproClass(VisOTestCase):
         rot_vecs = self.oris_flu.as_rotvec()
         rot_vecs = np.where(rot_vecs == 0, 1e-10, rot_vecs)
 
-        j_num = calc_2point_jacobian(calibcam.helper_ag.rodrigues_as_rotmats, 1e-6, rot_vecs)
+        j_num = calc_2point_jacobian(calibcam.helper_ag.rodrigues_as_rotmats, rot_vecs, 1e-6)
         j = jacobian(calibcam.helper_ag.rodrigues_as_rotmats)(rot_vecs)
         np.testing.assert_allclose(j, j_num, rtol=1e-7, atol=1e-8)
 
@@ -80,7 +79,7 @@ class TestJacobianReproClass(VisOTestCase):
             landmarks_rand, oris_flu_rand, positions_rand = self.pertubate_opt_quantities()
             rot_vecs = np.where(oris_flu_rand == 0, 1e-10, oris_flu_rand)
 
-            j_num = calc_2point_jacobian(calibcam.helper_ag.rodrigues_as_rotmats, 1e-6, rot_vecs)
+            j_num = calc_2point_jacobian(calibcam.helper_ag.rodrigues_as_rotmats, rot_vecs, 1e-6)
             j = jacobian(calibcam.helper_ag.rodrigues_as_rotmats)(rot_vecs)
             np.testing.assert_allclose(j, j_num, rtol=1e-7, atol=1e-8)
 
@@ -93,7 +92,7 @@ class TestJacobianReproClass(VisOTestCase):
                                                                       oris_flu_rand, landmark_imcoords=self.landmark_imcoords)
 
             print(
-                f"Jacobian check {check_jacobian(bboVisO.viso_repro.objfun_repro_jacobian_wrapper, bboVisO.viso_repro.objfun_repro_wrapper, vars_free, args)}")
+                f"Jacobian check {check_jacobian(bboVisO.methods.viso_repro.viso_repro.objfun_repro_jacobian_wrapper, bboVisO.methods.viso_repro.viso_repro.objfun_repro_wrapper, vars_free, args)}")
 
             # Test
             # np.testing.assert_allclose(error.ravel(), error_wrapper, rtol=1e-10, atol=1e-10)

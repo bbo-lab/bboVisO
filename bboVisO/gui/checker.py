@@ -2,9 +2,8 @@ import sys
 import matplotlib
 
 from PyQt5 import QtGui
-from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QWidget,
-                             QSlider, QLabel, QLineEdit, QComboBox, QPushButton)
+                             QSlider, QLineEdit, QComboBox, QPushButton)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import numpy as np
@@ -15,7 +14,7 @@ from svidreader import get_reader
 
 import bboVisO.interpolation
 from bboVisO.opts import get_opts
-from bboVisO.viso_repro import objfun_repro_runner
+from bboVisO.methods.repro import objfun_repro_runner
 from calibcamlib import Camerasystem
 
 from bboVisO import helper
