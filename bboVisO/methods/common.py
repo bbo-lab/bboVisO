@@ -1,3 +1,5 @@
+from time import time
+
 import numpy as np
 from scipy.sparse import csr_matrix, hstack as sparse_hstack
 
@@ -30,80 +32,87 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
     jacs_sparse = []
 
     # Landmarks
-    rows = []
-    cols = []
-    data = []
-    element_length = 3
     jac_idx = 0
     mask = args['mask_opt'][edges[jac_idx]:edges[jac_idx + 1]]
-    n_cols = np.sum(mask)
-    next_col = 0
     if not np.any(mask):
-        jacs_sparse.append(csr_matrix((data, (rows, cols)), shape=(result_size, 0)))
+        jacs_sparse.append(csr_matrix(([], ([], [])), shape=(result_size, 0)))
     else:
+        element_length = 3
+        n_cols = np.sum(mask)
+        next_col = 0
+        rows = np.empty((sm * sk * sd * n_cols,))
+        cols = np.empty((sm * sk * sd * n_cols,))
+        data = np.empty((sm * sk * sd * n_cols,))
+        data_ptr = 0
+
         for i_n in rn:
             start_idx = i_n * element_length
             element_mask = mask[start_idx:(start_idx + element_length)]
-            j = jacs[jac_idx](landmarks[(i_n,),], positions, oris_flu, cam_rotvecs, cam_ts,
-                              marker_var[:, :, (i_n,)], *extra_args)
+            j = np.array(jacs[jac_idx](landmarks[(i_n,),], positions, oris_flu, cam_rotvecs, cam_ts,
+                                       marker_var[:, :, (i_n,)], *extra_args))
             j = j[..., element_mask]
             for i_m in rm:
                 for i_k in rk:
                     for i_d in rd:
+                        en_cols = np.sum(element_mask)
                         ridxs, cidxs = make_squared_indices(i_m, i_k, i_n, i_d,  # Result dimensions
                                                             np.arange(next_col, next_col + np.sum(element_mask)),
                                                             n_cols)
-                        data.append(j[i_m, i_k, i_n, i_d, :].ravel())
-                        rows.append(ridxs)
-                        cols.append(cidxs)
+                        data[data_ptr:data_ptr + en_cols] = j[i_m, i_k, 0, i_d, :].ravel()
+                        rows[data_ptr:data_ptr + en_cols] = ridxs
+                        cols[data_ptr:data_ptr + en_cols] = cidxs
+                        data_ptr += en_cols
             next_col += np.sum(element_mask)
-        data = np.hstack(data)
-        rows = np.hstack(rows)
-        cols = np.hstack(cols)
         data[np.isnan(data)] = 0  # Possibly arccos numerically > 1?
         jacs_sparse.append(csr_matrix((data, (rows, cols)), shape=(result_size, n_cols)))
 
     # Positions, orientaions
     for jac_idx in range(1, 3):
-        rows = []
-        cols = []
-        data = []
-        element_length = 3
         mask = args['mask_opt'][edges[jac_idx]:edges[jac_idx + 1]]
-        n_cols = np.sum(mask)
-        next_col = 0
+
         if not np.any(mask):
-            jacs_sparse.append(csr_matrix((data, (rows, cols)), shape=(result_size, 0)))
+            jacs_sparse.append(csr_matrix(([], ([], [])), shape=(result_size, 0)))
         else:
+            element_length = 3
+            n_cols = np.sum(mask)
+            next_col = 0
+            rows = np.empty((sm * sn * sd * n_cols,))
+            cols = np.empty((sm * sn * sd * n_cols,))
+            data = np.empty((sm * sn * sd * n_cols,))
+            data_ptr = 0
+
             for i_k in rk:
                 start_idx = i_k * element_length
                 element_mask = mask[start_idx:(start_idx + element_length)]
-                j = jacs[jac_idx](landmarks, positions[(i_k,),], oris_flu[(i_k,),], cam_rotvecs, cam_ts,
-                                  marker_var[:, (i_k,)], *extra_args)
+
+                j = np.array(jacs[jac_idx](landmarks, positions[(i_k,),], oris_flu[(i_k,),], cam_rotvecs, cam_ts,
+                                           marker_var[:, (i_k,)], *extra_args))
                 j = j[..., element_mask]
+
                 for i_m in rm:
                     for i_n in rn:
                         for i_d in rd:
+                            en_cols = np.sum(element_mask)
                             ridxs, cidxs = make_squared_indices(i_m, i_k, i_n, i_d,  # Result dimensions
-                                                                np.arange(next_col, next_col + np.sum(element_mask)),
+                                                                np.arange(next_col, next_col + en_cols),
                                                                 n_cols)
-                            data.append(j[i_m, i_k, i_n, i_d, :].ravel())
-                            rows.append(ridxs)
-                            cols.append(cidxs)
+
+                            data[data_ptr:data_ptr + en_cols] = j[i_m, 0, i_n, i_d, :].ravel()
+                            rows[data_ptr:data_ptr + en_cols] = ridxs
+                            cols[data_ptr:data_ptr + en_cols] = cidxs
+                            data_ptr += en_cols
                 next_col += np.sum(element_mask)
-            data = np.hstack(data)
-            rows = np.hstack(rows)
-            cols = np.hstack(cols)
+
             data[np.isnan(data)] = 0  # Possibly arccos numerically > 1?
             jacs_sparse.append(csr_matrix((data, (rows, cols)), shape=(result_size, n_cols)))
 
     # cam_rotvecs, cam_ts and potential others, expected to be dense but small matricies
     for jac_idx in range(3, len(jacs)):
         mask = args['mask_opt'][edges[jac_idx]:edges[jac_idx + 1]]
-        n_cols = np.sum(mask)
         j = np.array(jacs[jac_idx](landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
-                          marker_var, *extra_args).reshape(result_size, -1))
+                                   marker_var, *extra_args).reshape(result_size, -1))
         j[np.isnan(j)] = 0  # Possibly arccos numerically > 1?
         jacs_sparse.append(csr_matrix(j[:, mask]))
 
-    return sparse_hstack(jacs_sparse)
+    jac_sparse = sparse_hstack(jacs_sparse)
+    return jac_sparse

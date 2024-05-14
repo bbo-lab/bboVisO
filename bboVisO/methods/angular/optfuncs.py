@@ -1,3 +1,5 @@
+from time import time
+
 import numpy as np
 from jax import jit, jacfwd as jacobian
 from scipy.spatial.transform import Rotation
@@ -61,7 +63,8 @@ def objfun_jacobian_wrapper_dense(free_vars, args) -> np.ndarray:
 def objfun_jacobian_wrapper(free_vars, args) -> np.ndarray:
     sd = 1
     jacs = get_jacobians(args)
-    return objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_vars, sd)
+    jac_sparse = objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_vars, sd)
+    return jac_sparse
 
 
 def make_jacobian_sparsity_mask(m, k, n, mask_free_input):
