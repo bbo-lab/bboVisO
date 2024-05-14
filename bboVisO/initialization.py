@@ -4,7 +4,7 @@ from calibcamlib.helper import intersect
 from scipy.spatial.transform import Rotation as R
 
 from bboVisO.geometry import build_vector_bundle
-from bboVisO.helper import landmark_vecs_from_imcoords, landmark_imcoords_from_vecs
+from bboVisO.helper import landmark_vecs_from_imcoords, landmark_imcoords_from_vecs, get_var_edges
 from bboVisO.method_switches import make_jacobian_sparsity_mask
 
 
@@ -219,13 +219,3 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
     return vars_free, vars_full, mask_free_input
 
 
-def get_var_edges(m, k, k_p, n):
-    field_sizes = np.array([0,
-                            n * 3,  # landmarks
-                            k_p * 3,  # positions
-                            k * 3,  # orientations
-                            m * 3,  # cam extrinsic rotations
-                            m * 3,  # cam extrinsic positions
-                            ])
-    edges = np.cumsum(field_sizes)
-    return edges

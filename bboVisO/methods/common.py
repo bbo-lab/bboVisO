@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.sparse import csr_matrix, hstack as sparse_hstack
 
-from ..initialization import get_var_edges
+from ..helper import get_var_edges
 
 
 def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> np.ndarray:
@@ -49,12 +49,13 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
             j = j[..., element_mask]
             for i_m in rm:
                 for i_k in rk:
-                    ridxs, cidxs = make_squared_indices(i_m, i_k, i_n, rd,  # Result dimensions
-                                                        np.arange(next_col, next_col + np.sum(element_mask)),
-                                                        n_cols)
-                    data.append(j[i_m, i_k, i_n, :, :].ravel())
-                    rows.append(ridxs)
-                    cols.append(cidxs)
+                    for i_d in rd:
+                        ridxs, cidxs = make_squared_indices(i_m, i_k, i_n, i_d,  # Result dimensions
+                                                            np.arange(next_col, next_col + np.sum(element_mask)),
+                                                            n_cols)
+                        data.append(j[i_m, i_k, i_n, i_d, :].ravel())
+                        rows.append(ridxs)
+                        cols.append(cidxs)
             next_col += np.sum(element_mask)
         data = np.hstack(data)
         rows = np.hstack(rows)
@@ -82,12 +83,13 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
                 j = j[..., element_mask]
                 for i_m in rm:
                     for i_n in rn:
-                        ridxs, cidxs = make_squared_indices(i_m, i_k, i_n, rd,  # Result dimensions
-                                                            np.arange(next_col, next_col + np.sum(element_mask)),
-                                                            n_cols)
-                        data.append(j[i_m, i_k, i_n, :, :].ravel())
-                        rows.append(ridxs)
-                        cols.append(cidxs)
+                        for i_d in rd:
+                            ridxs, cidxs = make_squared_indices(i_m, i_k, i_n, i_d,  # Result dimensions
+                                                                np.arange(next_col, next_col + np.sum(element_mask)),
+                                                                n_cols)
+                            data.append(j[i_m, i_k, i_n, i_d, :].ravel())
+                            rows.append(ridxs)
+                            cols.append(cidxs)
                 next_col += np.sum(element_mask)
             data = np.hstack(data)
             rows = np.hstack(rows)

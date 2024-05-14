@@ -126,17 +126,17 @@ def infer_position_attitude(times, calibs, opts,
                     jacobian = iter_opts["optimization"]["jac"](vars_free, objfun_args)
                     print(f"Jacobian evaluation took {time.time() - t_jac}s")
 
-                    import matplotlib
-                    import matplotlib.pyplot as plt
-                    sparsity = method.make_jacobian_sparsity_mask(*landmark_imcoords.shape[:3], objfun_args["mask_opt"])
-                    matplotlib.use('Agg')
-                    fig, axes = plt.subplots(1,3)
-                    axes[0].imshow(jacobian > 0)
-                    axes[1].imshow(sparsity)
-                    axes[2].imshow(~sparsity & (jacobian > 0))
-                    print("JACOBIAN: ", jacobian.shape)
-                    fig.savefig(f"/home/voit/tmp/jacobian_{i_iter}_{i_opti}.svg")
-                    plt.close()
+                    # import matplotlib
+                    # import matplotlib.pyplot as plt
+                    # sparsity = method.make_jacobian_sparsity_mask(*landmark_imcoords.shape[:3], objfun_args["mask_opt"])
+                    # matplotlib.use('Agg')
+                    # fig, axes = plt.subplots(1,3)
+                    # axes[0].imshow(jacobian > 0)
+                    # axes[1].imshow(sparsity)
+                    # axes[2].imshow(~sparsity & (jacobian > 0))
+                    # print("JACOBIAN: ", jacobian.shape)
+                    # fig.savefig(f"/home/voit/tmp/jacobian_{i_iter}_{i_opti}.svg")
+                    # plt.close()
 
                 min_result: OptimizeResult = least_squares(method.objfun_wrapper,
                                                            vars_free,
