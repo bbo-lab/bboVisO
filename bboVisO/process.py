@@ -1,4 +1,3 @@
-import jax
 import numpy as np
 
 import bboVisO.viso as viso
@@ -8,9 +7,6 @@ from bboVisO.helper import (landmarks_to_array)
 from bboVisO.interpolation import interpolate_imcoords
 
 from bbo import label_lib
-
-# single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!
-jax.config.update("jax_enable_x64", True)
 
 # Some debug output
 viso.debug = True

@@ -1,5 +1,12 @@
 ## Not updated to newer code and currently unsupported
 
+import numpy as np
+from jax import jit, jacfwd as jacobian
+from scipy.spatial.transform import Rotation
+
+from bboVisO.unravel import unravel_vars as unravel_vars_base, unpack_calibs
+from .optfuncs_ag import objfun
+
 # import numpy as np
 #
 # from bboVisO.unravel import unravel_vars
@@ -11,7 +18,7 @@
 #
 #     landmark_vecs = args["landmark_vecs"]
 #
-#     errors3d = args['precalc']['objfunc_3d'](landmarks, positions, oris_flu, landmark_vecs)
+#     errors3d = objfun(landmarks, positions, oris_flu, landmark_vecs)
 #
 #     return errors3d.ravel()
 #

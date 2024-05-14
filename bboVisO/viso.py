@@ -1,19 +1,21 @@
+import importlib
 import sys
 import time
 
+import jax
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from scipy.optimize import least_squares, OptimizeResult
 
 import bboVisO
 from bboVisO.helper import realign_by_distant_features, update_calibs_extrinsics
-from bboVisO.initialization import make_optim_input, fill_landmark_imcoords_vecs, get_precalc
+from bboVisO.initialization import make_optim_input, fill_landmark_imcoords_vecs
 from bboVisO.interpolation import interpolate_high_error, interpolate_close_marker
-from bboVisO.method_switches import objective_function, jacobian_function, make_jacobian_sparsity_mask
 from bboVisO.unravel import unravel_vars
 
 debug = False
-
+# single precision is insufficient for numerica gradients  # TODO: Make optional
+jax.config.update("jax_enable_x64", True)
 
 def infer_position_attitude(times, calibs, opts,
                             landmark_imcoords=None, landmark_vecs=None,
@@ -28,14 +30,12 @@ def infer_position_attitude(times, calibs, opts,
     # Timing
     t = time.time()  #
 
-    # Get precalculations from lazy storage
-    precalc = get_precalc(opts)
-
     # Iterate through optimization types
     for i_iter, iter_opts in enumerate(opts["iterations"]):
+        method = importlib.import_module("bboVisO.methods." + iter_opts['objective_function'] + ".optfuncs")
         # Adjust options
         if iter_opts["optimization"]["jac"] == "jax":
-            iter_opts["optimization"]["jac"] = jacobian_function(iter_opts)
+            iter_opts["optimization"]["jac"] = method.objfun_jacobian_wrapper
             iter_opts["sparse_jacobian"] = False
 
         # Iterate through opimization steps
@@ -76,16 +76,15 @@ def infer_position_attitude(times, calibs, opts,
                                                                           optimize=opt,
                                                                           landmarks_optimize=landmarks_optimize,
                                                                           landmarks_far=landmarks_far,
-                                                                          precalc=precalc,
                                                                           landmark_imcoords=landmark_imcoords[:,
                                                                                             (i_fr,), ],
                                                                           landmark_vecs=landmark_vecs[:, (i_fr,), ])
 
-                    error = objective_function(iter_opts)(vars_free, objfun_args)
+                    error = method.objfun_wrapper(vars_free, objfun_args)
                     cost_pre.append(np.sum(error ** 2) / 2)
                     if i_fr == 0:
                         t_objfun = time.time()
-                        objective_function(iter_opts)(vars_free, objfun_args)
+                        method.objfun_wrapper(vars_free, objfun_args)
                         print(f"Objective function evaluation took {time.time() - t_objfun}s")
 
                         if not isinstance(iter_opts["optimization"]["jac"], str):
@@ -94,13 +93,13 @@ def infer_position_attitude(times, calibs, opts,
                             jacobian = iter_opts["optimization"]["jac"](vars_free, objfun_args)
                             print(f"Jacobian evaluation took {time.time() - t_jac}s")
 
-                    min_result: OptimizeResult = least_squares(objective_function(iter_opts),
+                    min_result: OptimizeResult = least_squares(method.objfun_wrapper,
                                                                vars_free,
                                                                args=[objfun_args],
                                                                **optim_args,
                                                                **iter_opts["optimization"]
                                                                )
-                    cost.append(np.sum(objective_function(iter_opts)(min_result.x, objfun_args) ** 2) / 2)
+                    cost.append(np.sum(method.objfun_wrapper(min_result.x, objfun_args) ** 2) / 2)
                     positions_init[i_fr], oris_flu_init[i_fr] = unravel_vars(min_result.x, objfun_args)[1:3]
                     print(".", end="")
                     sys.stdout.flush()
@@ -112,13 +111,12 @@ def infer_position_attitude(times, calibs, opts,
                                                                       optimize=opt,
                                                                       landmarks_optimize=landmarks_optimize,
                                                                       landmarks_far=landmarks_far,
-                                                                      precalc=precalc,
                                                                       landmark_imcoords=landmark_imcoords,
                                                                       landmark_vecs=landmark_vecs)
 
-                error = objective_function(iter_opts)(vars_free, objfun_args)
+                error = method.objfun_wrapper(vars_free, objfun_args)
                 t_objfun = time.time()
-                objective_function(iter_opts)(vars_free, objfun_args)
+                method.objfun_wrapper(vars_free, objfun_args)
                 print(f"Objective function evaluation took {time.time() - t_objfun}s")
                 cost_pre = np.sum(error ** 2) / 2
 
@@ -130,7 +128,7 @@ def infer_position_attitude(times, calibs, opts,
 
                     import matplotlib
                     import matplotlib.pyplot as plt
-                    sparsity = make_jacobian_sparsity_mask(iter_opts)(*landmark_imcoords.shape[:3], objfun_args["mask_opt"])
+                    sparsity = method.make_jacobian_sparsity_mask(*landmark_imcoords.shape[:3], objfun_args["mask_opt"])
                     matplotlib.use('Agg')
                     fig, axes = plt.subplots(1,3)
                     axes[0].imshow(jacobian > 0)
@@ -140,13 +138,13 @@ def infer_position_attitude(times, calibs, opts,
                     fig.savefig(f"/home/voit/tmp/jacobian_{i_iter}_{i_opti}.svg")
                     plt.close()
 
-                min_result: OptimizeResult = least_squares(objective_function(iter_opts),
+                min_result: OptimizeResult = least_squares(method.objfun_wrapper,
                                                            vars_free,
                                                            args=[objfun_args],
                                                            **optim_args,
                                                            **iter_opts["optimization"]
                                                            )
-                cost = np.sum(objective_function(iter_opts)(min_result.x, objfun_args) ** 2) / 2
+                cost = np.sum(method.objfun_wrapper(min_result.x, objfun_args) ** 2) / 2
 
                 landmarks_init, positions_init, oris_flu_init, cam_rotvecs, cam_ts = unravel_vars(min_result.x,
                                                                                                   objfun_args)

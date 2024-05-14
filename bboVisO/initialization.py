@@ -1,23 +1,16 @@
 import numpy as np
 
-import bboVisO.methods.angular.optfuncs_ag
-import bboVisO.methods.repro.optfuncs_ag
 from calibcamlib.helper import intersect
-from jax import jit, jacfwd as jacobian
 from scipy.spatial.transform import Rotation as R
 
 from bboVisO.geometry import build_vector_bundle
 from bboVisO.helper import landmark_vecs_from_imcoords, landmark_imcoords_from_vecs
 from bboVisO.method_switches import make_jacobian_sparsity_mask
 
-from bbo.geometry import RigidTransform
-
-precalc_lazy = None
-
 
 def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None,
                      optimize=None, landmarks_optimize=None, landmarks_far=None,
-                     precalc=None, landmark_imcoords=None, landmark_vecs=None):
+                     landmark_imcoords=None, landmark_vecs=None):
     landmark_imcoords, landmark_vecs = fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs)
 
     vars_free, vars_full, mask_free_input = \
@@ -40,7 +33,6 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
         'calibs': calibs,
         'camera_positions': t_c2w,
         'lm_close_pen_weight': opts["lm_close_pen_weight"],
-        'precalc': get_precalc(opts) if precalc is None else precalc
     }
 
     if not opts["single_position"]:
@@ -81,14 +73,7 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
     else:
         k_p = k
 
-    field_sizes = np.array([0,
-                            n * 3,  # landmarks
-                            k_p * 3,  # positions
-                            k * 3,  # orientations
-                            m * 3,  # cam extrinsic rotations
-                            m * 3,  # cam extrinsic positions
-                            ])
-    edges = np.cumsum(field_sizes)
+    edges = get_var_edges(m, k, k_p, n)
 
     vars_full = np.full(edges[-1], np.nan)
     mask_free_input = np.ones(vars_full.shape, dtype=bool)
@@ -234,20 +219,13 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
     return vars_free, vars_full, mask_free_input
 
 
-def get_precalc(opts):
-    global precalc_lazy
-
-    if precalc_lazy is None:
-        print(opts["jax_backend"])
-        precalc_lazy = {
-            'objfunc_repro': jit(bboVisO.methods.repro.optfuncs_ag.objfun, backend=opts["jax_backend"]),
-            'jacobians_repro': [jit(jacobian(bboVisO.methods.repro.optfuncs_ag.objfun, i_var), backend=opts["jax_backend"])
-                                for i_var in range(5)],
-            'objfunc_angular': jit(bboVisO.methods.angular.optfuncs_ag.objfun),  # , backend=opts["jax_backend"]),
-            'jacobians_angular': [jit(jacobian(bboVisO.methods.angular.optfuncs_ag.objfun, i_var), backend=opts["jax_backend"])
-                                  for i_var in range(5)],
-            # 'objfunc_3d': jit(viso_ag.objfun_3d, backend=opts["jax_backend"]),
-            # 'jacobians_3d': [jit(jacobian(viso_ag.objfun_3d, i_var), backend=opts["jax_backend"])
-            #                  for i_var in range(3)],
-        }
-    return precalc_lazy
+def get_var_edges(m, k, k_p, n):
+    field_sizes = np.array([0,
+                            n * 3,  # landmarks
+                            k_p * 3,  # positions
+                            k * 3,  # orientations
+                            m * 3,  # cam extrinsic rotations
+                            m * 3,  # cam extrinsic positions
+                            ])
+    edges = np.cumsum(field_sizes)
+    return edges

@@ -28,9 +28,9 @@ def get_opts():
 angular_jax_po_pol = {
     'optimization': {
         'method': 'trf',
-        'ftol': 1e-3,
-        'xtol': 1e-6,
-        'gtol': 1e-6,
+        'ftol': 1e-8,
+        'xtol': 1e-8,
+        'gtol': 1e-8,
         'x_scale': 'jac',
         'loss': 'linear',
         'tr_solver': 'lsmr',
@@ -74,8 +74,8 @@ angular_jax_po_pol = {
 repro_jax_po_pol_pol = {
     'optimization': {
         'method': 'trf',
-        'ftol': 1e-6,
-        'xtol': 1e-6,
+        'ftol': 1e-8,
+        'xtol': 1e-8,
         'gtol': 1e-8,
         'x_scale': 'jac',
         'loss': 'linear',
@@ -122,9 +122,9 @@ repro_jax_po_pol_pol = {
 angular_jax_po_single = {
     'optimization': {
         'method': 'trf',
-        'ftol': 1e-3,
-        'xtol': 1e-6,
-        'gtol': 1e-6,
+        'ftol': 1e-8,
+        'xtol': 1e-8,
+        'gtol': 1e-8,
         'x_scale': 'jac',
         'loss': 'linear',
         'tr_solver': 'lsmr',
@@ -167,8 +167,8 @@ angular_jax_po_single = {
 repro_jax_po_single = {
     'optimization': {
         'method': 'trf',
-        'ftol': 1e-6,
-        'xtol': 1e-6,
+        'ftol': 1e-8,
+        'xtol': 1e-8,
         'gtol': 1e-8,
         'x_scale': 'jac',
         'loss': 'linear',

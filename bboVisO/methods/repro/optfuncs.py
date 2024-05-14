@@ -1,28 +1,30 @@
 import numpy as np
+from jax import jit, jacfwd as jacobian
+
 from scipy.spatial.transform import Rotation as R
 
 from bboVisO.unravel import unravel_vars as unravel_vars_base, unpack_calibs
-
 from .optfuncs_ag import objfun
+
 
 def objfun_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs, opts) -> np.ndarray:
     cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(calibs)
-    errors2d = np.array(objfun(landmarks, positions, oris_flu, R.from_matrix(cam_Rs).as_rotvec(), cam_ts,
-                                             landmark_imcoords, cam_matrices, ks, xis,
-                                             opts["lm_close_pen_weight"]))
+    errors = np.array(objfun(landmarks, positions, oris_flu, R.from_matrix(cam_Rs).as_rotvec(), cam_ts,
+                             landmark_imcoords, cam_matrices, ks, xis,
+                             opts["lm_close_pen_weight"]))
 
-    return errors2d
+    return errors
 
 
 def objfun_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
     obfun_inputs = unravel_vars(free_vars, args)
-    errors2d = np.array(args['precalc']['objfunc_repro'](*obfun_inputs))
+    errors = np.array(jit(objfun)(*obfun_inputs))
 
     if no_ravel:
-        return errors2d
+        return errors
     else:
-        errors2d[np.isnan(errors2d)] = 0
-        return errors2d.ravel()
+        errors[np.isnan(errors)] = 0
+        return errors.ravel()
 
 
 def objfun_jacobian_wrapper(free_vars, args) -> np.ndarray:
@@ -38,7 +40,37 @@ def objfun_jacobian_wrapper(free_vars, args) -> np.ndarray:
               lm_close_pen_weight).reshape(
                 result_shape + (-1,))
         )
-        for j in args['precalc']['jacobians_repro']
+        for j in get_jacobians(args)
+    ]
+
+    # Concatenate along input dimensions
+    obj_fcn_jacobian = np.concatenate(
+        obj_fcn_jacobian,
+        axis=4)
+
+    # Ravel variable dimension
+    obj_fcn_jacobian = obj_fcn_jacobian.reshape((np.prod(result_shape), args['mask_opt'].size))
+
+    # Dump non-free variables
+    obj_fcn_jacobian = obj_fcn_jacobian[:, args['mask_opt']]
+
+    return obj_fcn_jacobian
+
+
+def objfun_jacobian_wrapper_sparse(free_vars, args) -> np.ndarray:
+    (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
+     landmark_imcoords, cam_matrices, ks, xis, lm_close_pen_weight) = unravel_vars(free_vars, args)
+    result_shape = landmark_imcoords.shape
+
+    # TODO (minor speed) Do not calculate Jacobian if there are no related free variables
+    obj_fcn_jacobian = [
+        np.array(
+            # Ravel over input dimensions
+            j(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoords, cam_matrices, ks, xis,
+              lm_close_pen_weight).reshape(
+                result_shape + (-1,))
+        )
+        for j in get_jacobians(args)
     ]
 
     # Concatenate along input dimensions
@@ -89,3 +121,16 @@ def unravel_vars(free_vars, args):
     lm_close_pen_weight = args["lm_close_pen_weight"]
     return (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
             landmark_imcoords, cam_matrices, ks, xis, lm_close_pen_weight)
+
+
+jacobians_repro = None
+
+
+def get_jacobians(opts):
+    global jacobians_repro
+    if jacobians_repro is None:
+        if "jax_backend" not in opts:
+            opts["jax_backend"] = "cpu"
+            print("Set JAX backend to CPU")
+        jacobians_repro = [jit(jacobian(objfun, i_var), backend=opts["jax_backend"]) for i_var in range(5)]
+    return jacobians_repro
