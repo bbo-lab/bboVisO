@@ -14,7 +14,7 @@ from svidreader import get_reader
 
 import bboVisO.interpolation
 from bboVisO.opts import get_opts
-from bboVisO.methods.repro import objfun_repro_runner
+from bboVisO.methods.repro.optfuncs import objfun_runner
 from calibcamlib import Camerasystem
 
 from bboVisO import helper
@@ -374,7 +374,7 @@ class bboVisOchecker(QMainWindow):
             # ori_flu = R.from_quat([-0.467, 0.808, -0.290, 0.214])
 
             opts = get_opts()
-            repro_error = objfun_repro_runner(
+            repro_error = objfun_runner(
                 self.landmark_coords3d, pos[np.newaxis], ori_flu.as_rotvec()[np.newaxis],
                 self.landmark_imcoords[:, (self.time_idx,),],
                 self.calibs, opts["iterations"][-1]

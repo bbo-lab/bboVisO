@@ -4,6 +4,12 @@ import sys
 def get_opts():
     return {
         'iterations': [
+            # angular_jax_po_single,
+            # repro_jax_po_single,
+            # angular_jax_po_single,
+            # repro_jax_po_single,
+            angular_jax_po_pol,
+            repro_jax_po_pol_pol,
             angular_jax_po_pol,
             repro_jax_po_pol_pol,
         ],
@@ -28,9 +34,9 @@ def get_opts():
 angular_jax_po_pol = {
     'optimization': {
         'method': 'trf',
-        'ftol': 1e-8,
-        'xtol': 1e-8,
-        'gtol': 1e-8,
+        'ftol': 1e-3,
+        'xtol': 1e-6,
+        'gtol': 1e-6,
         'x_scale': 'jac',
         'loss': 'linear',
         'tr_solver': 'lsmr',
@@ -122,9 +128,9 @@ repro_jax_po_pol_pol = {
 angular_jax_po_single = {
     'optimization': {
         'method': 'trf',
-        'ftol': 1e-8,
-        'xtol': 1e-8,
-        'gtol': 1e-8,
+        'ftol': 1e-3,
+        'xtol': 1e-6,
+        'gtol': 1e-6,
         'x_scale': 'jac',
         'loss': 'linear',
         'tr_solver': 'lsmr',
@@ -167,9 +173,9 @@ angular_jax_po_single = {
 repro_jax_po_single = {
     'optimization': {
         'method': 'trf',
-        'ftol': 1e-8,
-        'xtol': 1e-8,
-        'gtol': 1e-8,
+        'ftol': 1e-3,
+        'xtol': 1e-6,
+        'gtol': 1e-6,
         'x_scale': 'jac',
         'loss': 'linear',
         # 'tr_solver': 'lsmr' is forced since jac_sparsity is also passed to least_squares function

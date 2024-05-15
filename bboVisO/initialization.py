@@ -96,7 +96,7 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
         # Initialize to a distance of 100m into the direction of the  respective camera vectors
         landmarks_init = build_vector_bundle(landmark_vectors_sphere[0], landmark_vectors_sphere[1:]) * 100
 
-    if positions is not None:
+    if positions is not None and not np.all(np.isnan(positions)):
         positions_init = positions  # TODO: Implement single position
     else:
         # Calculate mean of all non-far landmarks
@@ -114,7 +114,7 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
             print("Initialized with coordinate origin. This is probably undesirable.")
             positions_init = np.zeros((k, 3))  # We initialize to the size of orientations, even for single position
 
-    if oris_flu is not None:
+    if oris_flu is not None and not np.all(np.isnan(oris_flu)):
         oris_flu_init = oris_flu
     else:
         # Initialize to zero

@@ -36,7 +36,10 @@ def infer_position_attitude(times, calibs, opts,
         # Adjust options
         if iter_opts["optimization"]["jac"] == "jax":
             iter_opts["optimization"]["jac"] = method.objfun_jacobian_wrapper
-            iter_opts["sparse_jacobian"] = False
+            iter_opts["sparse_jacobian"] = False  # We do not need to calculate a sparsity matrix for this
+        elif iter_opts["optimization"]["jac"] == "jax_dense":
+            iter_opts["optimization"]["jac"] = method.objfun_jacobian_wrapper_dense
+            iter_opts["sparse_jacobian"] = False  # We do not need to calculate a sparsity matrix for this
 
         # Iterate through opimization steps
         for i_opti, opt in enumerate(iter_opts["optimize"]):
@@ -67,12 +70,25 @@ def infer_position_attitude(times, calibs, opts,
                 assert set(opt).issubset(["positions", "oris"]), ("Single frames can only be optimized for position "
                                                                   "and orientation")
 
-                for i_fr in range(len(positions_init)):  # TODO paralellize
+                if positions_init is None:
+                    positions_init = np.full((landmark_imcoords.shape[1], 3), np.nan)
+                if oris_flu_init is None:
+                    oris_flu_init = np.full((landmark_imcoords.shape[1], 3), np.nan)
+                pass
+                for i_fr in range(landmark_imcoords.shape[1]):  # TODO paralellize
                     # Run optimization
+                    if positions_init[i_fr] is None:
+                        p_init = None
+                    else:
+                        p_init = positions_init[(i_fr,),]
+                    if oris_flu_init[i_fr] is None:
+                        o_init = None
+                    else:
+                        o_init = oris_flu_init[(i_fr,),]
                     vars_free, objfun_args, optim_args = make_optim_input(calibs, iter_opts,
                                                                           landmarks_init,
-                                                                          positions_init[(i_fr,),],
-                                                                          oris_flu_init[(i_fr,),],
+                                                                          p_init,
+                                                                          o_init,
                                                                           optimize=opt,
                                                                           landmarks_optimize=landmarks_optimize,
                                                                           landmarks_far=landmarks_far,
@@ -158,7 +174,7 @@ def infer_position_attitude(times, calibs, opts,
             positions_prev = positions_init
             print(f"Max pos shift {max_pos_shift}")
 
-            print("Cost reduced to ", np.sum(np.array(cost)), " from ", np.sum(np.array(cost_pre)))
+            print("Cost reduced from", np.round(np.sum(np.array(cost_pre)), 2), "to", np.round(np.sum(np.array(cost)), 2))
 
     if iter_opts["realign_by_distant_features"]:
         print("realign_by_distant_features")
