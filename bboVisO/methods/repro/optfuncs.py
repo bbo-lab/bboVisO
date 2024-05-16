@@ -10,9 +10,9 @@ from ...unravel import unravel_vars as unravel_vars_base, unpack_calibs
 
 def objfun_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs, opts) -> np.ndarray:
     cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(calibs)
-    errors = np.array(objfun(landmarks, positions, oris_flu, R.from_matrix(cam_Rs).as_rotvec(), cam_ts,
-                             landmark_imcoords, cam_matrices, ks, xis,
-                             opts["lm_close_pen_weight"]))
+    errors = np.array(jit(objfun)(landmarks, positions, oris_flu, R.from_matrix(cam_Rs).as_rotvec(), cam_ts,
+                                  landmark_imcoords, cam_matrices, ks, xis,
+                                  opts["lm_close_pen_weight"]))
 
     return errors
 

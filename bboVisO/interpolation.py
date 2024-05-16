@@ -3,7 +3,7 @@ from calibcamlib.camerasystem import Camerasystem
 from scipy.interpolate import interp1d
 from scipy.spatial.transform import Rotation as R, Slerp
 
-from bboVisO.helper import generate_immediate_neighbor_mask
+from bboVisO.helper import generate_immediate_neighbor_mask, landmark_vecs_from_imcoords, landmark_imcoords_from_vecs
 from bboVisO.methods.repro.optfuncs import objfun_runner as objfun_runner_repro
 
 
@@ -97,42 +97,31 @@ def interpolate_mask(time, pos, ori, mask):
     return pos_interp, ori_spline(time)
 
 
-def interpolate_imcoords(array_2d, array_time_base, calibs, sub_time_bases=None):
+def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
     # Interpolates time points in array_2d that are not part of sub_time_bases
-    array_2d_interp = array_2d.copy()
-    array_3d = np.full(array_2d_interp.shape[:-1] + (3,), np.nan)
+    vecs_cams = landmark_vecs_from_imcoords(imcoords, calibs)
 
-    cs = Camerasystem.from_calibs(calibs)
+    pretimes = time_base[1:] - time_base[:-1]
 
-    pretimes = array_time_base[1:] - array_time_base[:-1]
-
-    for i_c, (cam, imc_coords) in enumerate(zip(cs.cameras, array_2d)):
+    for i_c, vecs_cam in enumerate(vecs_cams):
         # create mask of frames that belong to one of the sub_time_bases that make up the array_time_base
         if sub_time_bases is None:
-            sub_time_base_members = np.ones_like(array_time_base, dtype=bool)
+            sub_time_base_members = np.ones_like(time_base, dtype=bool)
         else:
-            sub_time_base_members = np.isin(array_time_base, sub_time_bases[i_c])
+            sub_time_base_members = np.isin(time_base, sub_time_bases[i_c])
 
-        cam_obj = cam["camera"]
-
-        # This has shape times x markers x coords:
-        cam_vecs = cam_obj.sensor_to_space(imc_coords)
-
-        cam_vecs_interp = (cam_vecs[:-2] * pretimes[1:][..., np.newaxis, np.newaxis] +
-                           cam_vecs[2:] * pretimes[:-1][..., np.newaxis, np.newaxis])
-        cam_vecs_interp /= np.linalg.norm(cam_vecs_interp, axis=-1, keepdims=True)
+        vecs_cam_interp = (vecs_cam[:-2] * pretimes[1:][..., np.newaxis, np.newaxis] +
+                           vecs_cam[2:] * pretimes[:-1][..., np.newaxis, np.newaxis])
+        vecs_cam_interp /= np.linalg.norm(vecs_cam_interp, axis=-1, keepdims=True)
 
         # This changes cam_vecs IN PLACE!, replacing only the values previously nan
-        cam_vecs_ireg = cam_vecs[1:-1]
-        mask = np.isnan(cam_vecs_ireg) & (~sub_time_base_members[1:-1, np.newaxis, np.newaxis])
-        cam_vecs_ireg[mask] = cam_vecs_interp[mask]
+        vecs_cam_ireg = vecs_cam[1:-1]
+        mask = np.isnan(vecs_cam_ireg) & (~sub_time_base_members[1:-1, np.newaxis, np.newaxis])
+        vecs_cam_ireg[mask] = vecs_cam_interp[mask]
 
-        array_2d_interp[i_c] = cam_obj.space_to_sensor(cam_vecs)
-        cam2world_rot = R.from_matrix(cam["R"]).inv()
-        shape_cam_vecs = cam_vecs.shape
-        array_3d[i_c] = cam2world_rot.apply(cam_vecs.reshape(-1, 3)).reshape(shape_cam_vecs)
+    imcoords_interp = landmark_imcoords_from_vecs(vecs_cams, calibs)
 
-    return array_2d_interp, array_3d, array_time_base
+    return imcoords_interp, vecs_cams, time_base
 
 
 def interpolate_imcoords_rebase(array_2d, array_time_base, calibs, dt, time_base=None):

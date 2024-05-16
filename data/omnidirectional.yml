@@ -1,0 +1,22 @@
+{board_params: {boardHeight: 7, boardWidth: 7, dictionary_type: 0, marker_size: 0.7,
+    marker_size_real: 0.09999999999999999, square_size: 1.0, square_size_real: 0.14285714285714285},
+  calibs: [{A: [[836.6569661495523, 0.0, 946.3496843174486], [0.0, 837.4405688281729,
+          519.191517626148], [0.0, 0.0, 1.0]], k: [-0.34179625130797825, 0.20859194013694388,
+        -0.00015177840760605184, -0.0017352565299169492, -0.15736663343386956], rvec_cam: [
+        0.0, 0.0, 0.0], tvec_cam: [0.0, 0.0, 0.0], xi: [1.3507912403614744]}, {A: [
+        [1087.6315917047154, 0.0, 978.8167379776295], [0.0, 1088.6420962603133, 498.0615315235892],
+        [0.0, 0.0, 1.0]], k: [-0.20560125197079235, 0.6174917390103369, -4.35909526998698e-06,
+        -0.00627143660230443, -0.795767122332565], rvec_cam: [-0.00630151520748577,
+        3.1332432761688973, -0.017244352364496784], tvec_cam: [0.004529889891687882,
+        9.478781872641006e-06, -0.015602244279214006], xi: [1.9829781139154639]}],
+  rec_file_names: [/media/smb/soma.ad01.caesar.de/bbo/bulk/bird_hellenthal_FrontField/20230522_20230525_FlightWindow/20230523-1500/Calibration/video
+      1/card 2/CADDX000001.MP4, /media/smb/soma.ad01.caesar.de/bbo/bulk/bird_hellenthal_FrontField/20230522_20230525_FlightWindow/20230523-1500/Calibration/video
+      2/card 2/CADDX000001.MP4], version: 2.2, vid_headers: [{audio_codec: pcm_s16le,
+      codec: h264, duration: 236.0, ffmpeg_version: '4.2.2-static https://johnvansickle.com/ffmpeg/
+        built with gcc 8 (Debian 8.3.0-6)', fps: 60.0, nframes: .inf, offset: [0,
+        0], pix_fmt: yuv420p, plugin: ffmpeg, rotate: 0, sensorsize: [1080, 1920],
+      size: [1920, 1080], source_size: [1920, 1080]}, {audio_codec: pcm_s16le, codec: h264,
+      duration: 236.0, ffmpeg_version: '4.2.2-static https://johnvansickle.com/ffmpeg/
+        built with gcc 8 (Debian 8.3.0-6)', fps: 60.0, nframes: .inf, offset: [0,
+        0], pix_fmt: yuv420p, plugin: ffmpeg, rotate: 0, sensorsize: [1080, 1920],
+      size: [1920, 1080], source_size: [1920, 1080]}]}

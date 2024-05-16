@@ -67,6 +67,8 @@ angular_jax_po_pol = {
     # In the last step, pass over the data, optimizing pos and ori for each frame
     # individually
     'optimize_single_frames': False,
+    # With 'optimize_single_frames' True, initialize on previous frame
+    'optimize_single_init_prev': True,
     # object stays in one position, only estimate single position + rotations
     'single_position': False,
     # initial positions are lifted up by this factor
@@ -115,6 +117,8 @@ repro_jax_po_pol_pol = {
     # In the last step, pass over the data, optimizing pos and ori for each frame
     # individually
     'optimize_single_frames': False,
+    # With 'optimize_single_frames' True, initialize on previous frame
+    'optimize_single_init_prev': True,
     # object stays in one position, only estimate single position + rotations
     'single_position': False,
     # initial positions are lifted up by this factor
@@ -160,6 +164,8 @@ angular_jax_po_single = {
     # In the last step, pass over the data, optimizing pos and ori for each frame
     # individually
     'optimize_single_frames': True,
+    # With 'optimize_single_frames' True, initialize on previous frame
+    'optimize_single_init_prev': True,
     # object stays in one position, only estimate single position + rotations
     'single_position': False,
     # initial positions are lifted up by this factor
@@ -206,6 +212,8 @@ repro_jax_po_single = {
     # In the last step, pass over the data, optimizing pos and ori for each frame
     # individually
     'optimize_single_frames': True,
+    # With 'optimize_single_frames' True, initialize on previous frame
+    'optimize_single_init_prev': True,
     # object stays in one position, only estimate single position + rotations
     'single_position': False,
     # initial positions are lifted up by this factor

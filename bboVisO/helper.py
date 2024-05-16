@@ -4,6 +4,7 @@ from scipy.spatial.transform import Rotation as R
 
 from bbo.geometry import RigidTransform
 
+
 def get_cam_time_bases(frame_idxs, cam_fps, cam_offsets, opts):
     offsets = (np.array(cam_offsets)).astype(np.uint64)
 
@@ -117,17 +118,23 @@ def realign_by_distant_features(landmark_coords3d, imcoords, times, positions, o
 
 def landmark_vecs_from_imcoords(landmark_imcoords, calibs):
     cs = Camerasystem.from_calibs(calibs)
-    landmark_vecs = cs.get_camera_lines(landmark_imcoords)[0]
-    landmark_vecs /= np.linalg.norm(landmark_vecs, axis=-1, keepdims=True)  # Norm in case of averaging
-    landmark_vecs[np.all(landmark_vecs == 0, axis=-1)] = np.nan
-    return landmark_vecs
+
+    landmark_vecs_cams = np.empty(landmark_imcoords.shape[:-1] + (3,))
+    for i_c, c in enumerate(cs.cameras):
+        landmark_vecs_cams[i_c] = c["camera"].sensor_to_space(landmark_imcoords[i_c])
+
+    return landmark_vecs_cams
 
 
 def landmark_imcoords_from_vecs(landmark_vecs, calibs):
     cs = Camerasystem.from_calibs(calibs)
-    # raise Exception("This needs to be reimplemented taking into account camera positions")
-    landmark_imcoords = cs.project_dir(landmark_vecs)
+
+    landmark_imcoords = np.empty(landmark_vecs.shape[:-1] + (2,))
+    for i_c, c in enumerate(cs.cameras):
+        landmark_imcoords[i_c] = c["camera"].space_to_sensor(landmark_vecs[i_c])
+
     return landmark_imcoords
+
 
 def update_calibs_extrinsics(calibs, cam_rotvecs, cam_ts):
     for i_c, c in enumerate(calibs):

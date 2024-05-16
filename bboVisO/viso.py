@@ -74,10 +74,10 @@ def infer_position_attitude(times, calibs, opts,
                     positions_init = np.full((landmark_imcoords.shape[1], 3), np.nan)
                 if oris_flu_init is None:
                     oris_flu_init = np.full((landmark_imcoords.shape[1], 3), np.nan)
-                pass
+
                 for i_fr in range(landmark_imcoords.shape[1]):  # TODO paralellize
                     # Run optimization
-                    if positions_init[i_fr] is None:
+                    if positions_init[i_fr] is None or np.any:
                         p_init = None
                     else:
                         p_init = positions_init[(i_fr,),]
@@ -85,6 +85,10 @@ def infer_position_attitude(times, calibs, opts,
                         o_init = None
                     else:
                         o_init = oris_flu_init[(i_fr,),]
+
+                    if iter_opts["optimize_single_init_prev"] and i_fr > 0:
+                        p_init = positions_init[i_fr-1]
+
                     vars_free, objfun_args, optim_args = make_optim_input(calibs, iter_opts,
                                                                           landmarks_init,
                                                                           p_init,
