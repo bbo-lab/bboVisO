@@ -19,6 +19,11 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
     rn = np.arange(sn)
     rd = np.arange(sd)
 
+    rm_b = rm[:, None, None, None]
+    rk_b = rk[None, :, None, None]
+    rn_b = rn[None, None, :, None]
+    rd_b = rd[None, None, None, :]
+
     result_size = (sm * sk * sn * sd)
 
     def make_squared_indices(m_range, k_range, n_range, d_range, var_range, var_length):
@@ -42,8 +47,14 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
         next_col = 0
         rows = np.empty((sm * sk * sd * n_cols,))
         cols = np.empty((sm * sk * sd * n_cols,))
+        rows2 = np.empty((sm * sk * sd * n_cols,))
+        cols2 = np.empty((sm * sk * sd * n_cols,))
         data = np.empty((sm * sk * sd * n_cols,))
         data_ptr = 0
+
+        row_indices_base = (rm_b * (sk * sn * sd) +
+                           rk_b * (sn * sd) +
+                           rd_b).reshape(-1)
 
         for i_n in rn:
             start_idx = i_n * element_length
@@ -51,17 +62,18 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
             j = np.array(jacs[jac_idx](landmarks[(i_n,),], positions, oris_flu, cam_rotvecs, cam_ts,
                                        marker_var[:, :, (i_n,)], *extra_args))
             j = j[..., element_mask]
-            for i_m in rm:
-                for i_k in rk:
-                    for i_d in rd:
-                        en_cols = np.sum(element_mask)
-                        ridxs, cidxs = make_squared_indices(i_m, i_k, i_n, i_d,  # Result dimensions
-                                                            np.arange(next_col, next_col + np.sum(element_mask)),
-                                                            n_cols)
-                        data[data_ptr:data_ptr + en_cols] = j[i_m, i_k, 0, i_d, :].ravel()
-                        rows[data_ptr:data_ptr + en_cols] = ridxs
-                        cols[data_ptr:data_ptr + en_cols] = cidxs
-                        data_ptr += en_cols
+
+            en_cols = np.sum(element_mask)
+            row_indices = row_indices_base + i_n * sd
+            column_indices = np.tile(np.arange(en_cols) + next_col, row_indices.size)
+            row_indices = np.repeat(row_indices, np.sum(element_mask))
+
+            data_size = column_indices.size
+            rows[data_ptr:data_ptr + data_size] = row_indices
+            cols[data_ptr:data_ptr + data_size] = column_indices
+            data[data_ptr:data_ptr + data_size] = j.ravel()
+            data_ptr += data_size
+
             next_col += np.sum(element_mask)
         data[np.isnan(data)] = 0  # Possibly arccos numerically > 1?
         jacs_sparse.append(csr_matrix((data, (rows, cols)), shape=(result_size, n_cols)))
@@ -81,6 +93,10 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
             data = np.empty((sm * sn * sd * n_cols,))
             data_ptr = 0
 
+            row_indices_base = (rm_b * (sk * sn * sd) +
+                               rn_b * sd +
+                               rd_b).reshape(-1)
+
             for i_k in rk:
                 start_idx = i_k * element_length
                 element_mask = mask[start_idx:(start_idx + element_length)]
@@ -89,18 +105,17 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
                                            marker_var[:, (i_k,)], *extra_args))
                 j = j[..., element_mask]
 
-                for i_m in rm:
-                    for i_n in rn:
-                        for i_d in rd:
-                            en_cols = np.sum(element_mask)
-                            ridxs, cidxs = make_squared_indices(i_m, i_k, i_n, i_d,  # Result dimensions
-                                                                np.arange(next_col, next_col + en_cols),
-                                                                n_cols)
+                en_cols = np.sum(element_mask)
+                row_indices = row_indices_base + i_k * (sn * sd)
+                column_indices = np.tile(np.arange(en_cols) + next_col, row_indices.size)
+                row_indices = np.repeat(row_indices, np.sum(element_mask))
 
-                            data[data_ptr:data_ptr + en_cols] = j[i_m, 0, i_n, i_d, :].ravel()
-                            rows[data_ptr:data_ptr + en_cols] = ridxs
-                            cols[data_ptr:data_ptr + en_cols] = cidxs
-                            data_ptr += en_cols
+                data_size = column_indices.size
+                rows[data_ptr:data_ptr+data_size] = row_indices
+                cols[data_ptr:data_ptr + data_size] = column_indices
+                data[data_ptr:data_ptr + data_size] = j.ravel()
+                data_ptr += data_size
+
                 next_col += np.sum(element_mask)
 
             data[np.isnan(data)] = 0  # Possibly arccos numerically > 1?
