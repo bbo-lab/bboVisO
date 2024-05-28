@@ -7,7 +7,6 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from scipy.optimize import least_squares, OptimizeResult
 
-import bboVisO
 from bboVisO.helper import realign_by_distant_features, update_calibs_extrinsics
 from bboVisO.initialization import make_optim_input, fill_landmark_imcoords_vecs
 from bboVisO.interpolation import interpolate_high_error, interpolate_close_marker
@@ -17,15 +16,13 @@ debug = False
 # single precision is insufficient for numerica gradients  # TODO: Make optional
 jax.config.update("jax_enable_x64", True)
 
+
 def infer_position_attitude(times, calibs, opts,
                             landmark_imcoords=None, landmark_vecs=None,
                             landmarks_init=None, positions_init=None, oris_flu_init=None,
-                            landmarks_optimize=None, landmarks_far=None):
+                            landmarks_optimize=None, landmarks_far=None, landmarks_weights=None):
     # Fill landmark_imcoords from landmark_vecs or vice-versa
     landmark_imcoords, landmark_vecs = fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs)
-
-    # Previous positions for alternating update
-    positions_prev = np.full((landmark_imcoords.shape[1], 3), np.nan)
 
     # Timing
     t = time.time()  #
@@ -39,9 +36,9 @@ def infer_position_attitude(times, calibs, opts,
             iter_opts["sparse_jacobian"] = False  # We do not need to calculate a sparsity matrix for this
         elif iter_opts["optimization"]["jac"] == "jax_dense":
             iter_opts["optimization"]["jac"] = method.objfun_jacobian_wrapper_dense
-            iter_opts["sparse_jacobian"] = False  # We do not need to calculate a sparsity matrix for this
+            iter_opts["sparse_jacobian"] = True  #
 
-        # Iterate through opimization steps
+        # Iterate through optimization steps
         for i_opti, opt in enumerate(iter_opts["optimize"]):
             if (iter_opts["interpolate_high_error"] and iter_opts["interpolate_high_error"] != -1 and
                     positions_init is not None and oris_flu_init is not None):
@@ -65,6 +62,7 @@ def infer_position_attitude(times, calibs, opts,
                                                                          landmarks=landmarks_init)
             cost = []
             cost_pre = []
+
             if iter_opts["optimize_single_frames"]:
                 print(f"Optimizing {opt} - Single frames")
                 assert set(opt).issubset(["positions", "oris"]), ("Single frames can only be optimized for position "
@@ -75,7 +73,10 @@ def infer_position_attitude(times, calibs, opts,
                 if oris_flu_init is None:
                     oris_flu_init = np.full((landmark_imcoords.shape[1], 3), np.nan)
 
-                for i_fr in range(landmark_imcoords.shape[1]):  # TODO paralellize
+                # Previous positions
+                positions_prev = positions_init
+
+                for i_fr in range(landmark_imcoords.shape[1]):  # TODO parallelize
                     # Run optimization
                     if positions_init[i_fr] is None or np.any:
                         p_init = None
@@ -87,18 +88,19 @@ def infer_position_attitude(times, calibs, opts,
                         o_init = oris_flu_init[(i_fr,),]
 
                     if iter_opts["optimize_single_init_prev"] and i_fr > 0:
-                        p_init = positions_init[i_fr-1]
+                        p_init = positions_init[i_fr - 1]
 
-                    vars_free, objfun_args, optim_args = make_optim_input(calibs, iter_opts,
-                                                                          landmarks_init,
-                                                                          p_init,
-                                                                          o_init,
-                                                                          optimize=opt,
-                                                                          landmarks_optimize=landmarks_optimize,
-                                                                          landmarks_far=landmarks_far,
-                                                                          landmark_imcoords=landmark_imcoords[:,
-                                                                                            (i_fr,), ],
-                                                                          landmark_vecs=landmark_vecs[:, (i_fr,), ])
+                    vars_free, objfun_args, optim_args = (
+                        make_optim_input(calibs, iter_opts,
+                                         landmarks_init,
+                                         p_init,
+                                         o_init,
+                                         optimize=opt,
+                                         landmarks_optimize=landmarks_optimize,
+                                         landmarks_far=landmarks_far,
+                                         landmarks_weights=landmarks_weights,
+                                         landmark_imcoords=landmark_imcoords[:, (i_fr,)],
+                                         landmark_vecs=landmark_vecs[:, (i_fr,), ]))
 
                     error = method.objfun_wrapper(vars_free, objfun_args)
                     cost_pre.append(np.sum(error ** 2) / 2)
@@ -107,11 +109,7 @@ def infer_position_attitude(times, calibs, opts,
                         method.objfun_wrapper(vars_free, objfun_args)
                         print(f"Objective function evaluation took {time.time() - t_objfun}s")
 
-                        if not isinstance(iter_opts["optimization"]["jac"], str):
-                            iter_opts["optimization"]["jac"](vars_free, objfun_args)
-                            t_jac = time.time()
-                            jacobian = iter_opts["optimization"]["jac"](vars_free, objfun_args)
-                            print(f"Jacobian evaluation took {time.time() - t_jac}s")
+                        time_jacobian(iter_opts["optimization"]["jac"], vars_free, objfun_args)
 
                     min_result: OptimizeResult = least_squares(method.objfun_wrapper,
                                                                vars_free,
@@ -140,23 +138,10 @@ def infer_position_attitude(times, calibs, opts,
                 print(f"Objective function evaluation took {time.time() - t_objfun}s")
                 cost_pre = np.sum(error ** 2) / 2
 
-                if not isinstance(iter_opts["optimization"]["jac"], str):
-                    iter_opts["optimization"]["jac"](vars_free, objfun_args)
-                    t_jac = time.time()
-                    jacobian = iter_opts["optimization"]["jac"](vars_free, objfun_args)
-                    print(f"Jacobian evaluation took {time.time() - t_jac}s")
+                time_jacobian(iter_opts["optimization"]["jac"], vars_free, objfun_args)
 
-                    # import matplotlib
-                    # import matplotlib.pyplot as plt
-                    # sparsity = method.make_jacobian_sparsity_mask(*landmark_imcoords.shape[:3], objfun_args["mask_opt"])
-                    # matplotlib.use('Agg')
-                    # fig, axes = plt.subplots(1,3)
-                    # axes[0].imshow(jacobian > 0)
-                    # axes[1].imshow(sparsity)
-                    # axes[2].imshow(~sparsity & (jacobian > 0))
-                    # print("JACOBIAN: ", jacobian.shape)
-                    # fig.savefig(f"/home/voit/tmp/jacobian_{i_iter}_{i_opti}.svg")
-                    # plt.close()
+                # Previous positions
+                positions_prev = unravel_vars(vars_free, objfun_args)[1]
 
                 min_result: OptimizeResult = least_squares(method.objfun_wrapper,
                                                            vars_free,
@@ -175,12 +160,12 @@ def infer_position_attitude(times, calibs, opts,
 
             # Calculate and display position shift
             max_pos_shift = np.nanmax(np.linalg.norm((positions_prev - positions_init), axis=-1))
-            positions_prev = positions_init
             print(f"Max pos shift {max_pos_shift}")
 
-            print("Cost reduced from", np.round(np.sum(np.array(cost_pre)), 2), "to", np.round(np.sum(np.array(cost)), 2))
+            print("Cost reduced from", np.round(np.sum(np.array(cost_pre)), 2), "to",
+                  np.round(np.sum(np.array(cost)), 2))
 
-    if iter_opts["realign_by_distant_features"]:
+    if opts["iterations"][-1]["realign_by_distant_features"]:
         print("realign_by_distant_features")
         oris_flu_init = realign_by_distant_features(landmarks_init, landmark_imcoords, times,
                                                     positions_init, R.from_rotvec(oris_flu_init),
@@ -189,3 +174,11 @@ def infer_position_attitude(times, calibs, opts,
     print(f"Optimization took {time.time() - t} s, ")
 
     return landmarks_init, positions_init, oris_flu_init, calibs
+
+
+def time_jacobian(jac, vars_free, objfun_args):
+    if not isinstance(jac, str):
+        jac(vars_free, objfun_args)
+        t_jac = time.time()
+        jac(vars_free, objfun_args)
+        print(f"Jacobian evaluation took {time.time() - t_jac}s")

@@ -40,6 +40,7 @@ def landmarks_to_array(landmark_coordinates, detected_labels):
     landmarks_optimize = []  # Should this coordinate be optimized by bboViso?
     landmarks_far = []  # Is it a far away landmark (used in first run)
     landmarks_use = []  # Should it be used at all?
+    landmarks_weights = []  # Should it be used at all?
     landmarks_identity = []  # Is it identical to another one?
     # Only extract landmarks taht are also marked
     for ln in detected_labels:
@@ -70,15 +71,16 @@ def landmarks_to_array(landmark_coordinates, detected_labels):
             landmarks_all.append([np.nan, np.nan, np.nan])
             landmarks_optimize.append(True)
             landmarks_far.append(False)
-        if "use" in landmark_coordinates["landmarks"][ln]:
-            landmarks_use.append(landmark_coordinates["landmarks"][ln]["use"])
-        else:
-            landmarks_use.append(True)
+
+        landmarks_use.append(landmark_coordinates["landmarks"][ln].get("use", True))
+        landmarks_weights.append(landmark_coordinates["landmarks"][ln].get("weight", 1))
+
     landmarks_optimize = np.array(landmarks_optimize)
     landmarks_far = np.array(landmarks_far)
     landmarks_use = np.array(landmarks_use)
+    landmarks_weights = np.array(landmarks_weights)
     landmarks_all = np.array(landmarks_all)
-    return landmarks_all, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_use
+    return landmarks_all, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_use, landmarks_weights
 
 
 def generate_immediate_neighbor_mask(ts, neighbor_ts, max_dist):

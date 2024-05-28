@@ -50,8 +50,8 @@ def main():
                         help="Offset to add to second cam, for subframe resolution tests")
     parser.add_argument('--simulation', required=False, default=False, action="store_true",
                         help="Simulate input data for testing purposes")
-    parser.add_argument('--pertubation_deg', type=float, required=False, nargs=1, default=[0.2],
-                        help="Landmark direction pertubation in simulation")
+    parser.add_argument('--perturbation_deg', type=float, required=False, nargs=1, default=[0.2],
+                        help="Landmark direction perturbation in simulation")
     parser.add_argument('--landmark_radius', type=float, required=False, nargs=1, default=[30],
                         help="Landmark distance in simulation")
     args = parser.parse_args()
@@ -162,8 +162,8 @@ def main():
     elif args.simulation:
         from bboVisO.simulation import run_simulated_data  # noqa: E402
 
-        landmarks, positions, oris, analysis_frames = run_simulated_data(opts, pertubation_deg=args.pertubation_deg[0],
-                                                                         landmark_radius=args.landmark_radius[0])
+        run_simulated_data(opts, pertubation_deg=args.pertubation_deg[0],
+                           landmark_radius=args.landmark_radius[0])
     else:
         raise Exception("Data or simulation needs to be provided")
     pass

@@ -9,8 +9,12 @@ from bboVisO.method_switches import make_jacobian_sparsity_mask
 
 
 def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None,
-                     optimize=None, landmarks_optimize=None, landmarks_far=None,
+                     optimize=None, landmarks_optimize=None, landmarks_far=None, landmarks_weights=None,
                      landmark_imcoords=None, landmark_vecs=None):
+
+    if landmarks_weights is None:
+        landmarks_weights = np.ones((len(landmarks),))
+
     landmark_imcoords, landmark_vecs = fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs)
 
     vars_free, vars_full, mask_free_input = \
@@ -29,6 +33,7 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
         'mask_opt': mask_free_input,  # Mask of free vars within all vars
         'landmark_imcoords': landmark_imcoords,
         'landmark_vecs': landmark_vecs,
+        'landmarks_weights': landmarks_weights[np.newaxis, np.newaxis, :, np.newaxis], # Reshape for later mult.
         'single_position': opts["single_position"],
         'calibs': calibs,
         'camera_positions': t_c2w,
@@ -217,5 +222,3 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
         print(f"Optimizing {np.sum(mask_free_input)} of {mask_free_input.size} variables")
 
     return vars_free, vars_full, mask_free_input
-
-
