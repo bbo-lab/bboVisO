@@ -15,7 +15,8 @@ import numpy as np
 
 class TestObjfun3DClass(VisOTestCase):
     def test_opt_objfun_3d(self):
-        error = bboVisO.methods.viso_3derr.optfuncs_ag.objfun(self.landmarks, self.positions, self.oris_flu.as_rotvec(), self.landmark_vecs)
+        error = bboVisO.methods.viso_3derr.optfuncs_ag.objfun(self.landmarks, self.positions, self.oris_flu.as_rotvec(),
+                                                              self.landmark_vecs,,,
 
         print(f"Max error value for ground truth: {np.max(np.abs(error))}")
         np.testing.assert_allclose(np.zeros_like(error), error, rtol=1e-10, atol=1e-10)
@@ -38,7 +39,8 @@ class TestObjfun3DClass(VisOTestCase):
                 self.pertubate_opt_quantities()
 
             # Calculate objective function directly
-            error = bboVisO.methods.viso_3derr.optfuncs_ag.objfun(landmarks_rand, positions_rand, oris_flu_rand, landmark_vecs_rand)
+            error = bboVisO.methods.viso_3derr.optfuncs_ag.objfun(landmarks_rand, positions_rand, oris_flu_rand,
+                                                                  landmark_vecs_rand,,,
 
             # Calculate objective function through wrapper
             vars_free, args = bboVisO.initialization.make_optim_input(self.calibs, self.opts, landmarks_rand, positions_rand,
