@@ -19,9 +19,9 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
         data = np.round(positions.T, decimals=8)
         df = pd.DataFrame()
         df['t_us'] = time_base
-        df['x0'] = data[0]
-        df['y0'] = data[1]
-        df['z0'] = data[2]
+        df['x'] = data[0]
+        df['y'] = data[1]
+        df['z'] = data[2]
         filter_and_save(csv_file, df, opts)
 
         # Orientations
@@ -29,10 +29,10 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
         data = R.from_rotvec(oris_flu).as_quat(canonical=True).T
         df = pd.DataFrame()
         df['t_us'] = time_base
-        df['x0'] = data[0]
-        df['y0'] = data[1]
-        df['z0'] = data[2]
-        df['w0'] = data[3]
+        df['x'] = data[0]
+        df['y'] = data[1]
+        df['z'] = data[2]
+        df['w'] = data[3]
         filter_and_save(csv_file, df, opts)
     else:
         # Positions
@@ -40,15 +40,15 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
         data = np.round(positions.T, decimals=8)
         df = pd.DataFrame()
         df['t_us'] = time_base
-        df['x0'] = data[0]
-        df['y0'] = data[1]
-        df['z0'] = data[2]
+        df['x'] = data[0]
+        df['y'] = data[1]
+        df['z'] = data[2]
         data = R.from_rotvec(oris_flu).as_quat(canonical=True).T
         df['t_us'] = time_base
-        df['rx0'] = data[0]
-        df['ry0'] = data[1]
-        df['rz0'] = data[2]
-        df['rw0'] = data[3]
+        df['rx'] = data[0]
+        df['ry'] = data[1]
+        df['rz'] = data[2]
+        df['rw'] = data[3]
         filter_and_save(csv_file, df, opts)
 
     # Errors
@@ -89,12 +89,12 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
 
         df = pd.DataFrame()
         df['landmark'] = landmark_labels
-        df['x0'] = landmarks[:, 0]
-        df['y0'] = landmarks[:, 1]
-        df['z0'] = landmarks[:, 2]
-        df['dx0'] = landmarks_diff[:, 0]
-        df['dy0'] = landmarks_diff[:, 1]
-        df['dz0'] = landmarks_diff[:, 2]
+        df['x'] = landmarks[:, 0]
+        df['y'] = landmarks[:, 1]
+        df['z'] = landmarks[:, 2]
+        df['dx'] = landmarks_diff[:, 0]
+        df['dy'] = landmarks_diff[:, 1]
+        df['dz'] = landmarks_diff[:, 2]
         df.set_index("landmark", inplace=True)
         df.to_csv(csv_file, sep='\t', index=True, header=list(df.columns))
 

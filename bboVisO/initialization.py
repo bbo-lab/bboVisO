@@ -40,7 +40,7 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
         'lm_close_pen_weight': opts["lm_close_pen_weight"],
     }
 
-    if not opts["single_position"]:
+    if not opts["single_position"] and opts["sparse_jacobian"] :
         jac_sparsity = make_jacobian_sparsity_mask(opts)(m, k, n, mask_free_input)
     else:
         jac_sparsity = None  # TODO: implement

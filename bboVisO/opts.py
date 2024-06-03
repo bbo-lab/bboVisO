@@ -140,7 +140,7 @@ repro_jax_po_pol_pol = {
 angular_jax_po_single = {
     'optimization': {
         'method': 'trf',
-        'ftol': 1e-3,
+        'ftol': 1e-6,
         'xtol': 1e-6,
         'gtol': 1e-6,
         'x_scale': 'jac',
@@ -187,7 +187,7 @@ angular_jax_po_single = {
 repro_jax_po_single = {
     'optimization': {
         'method': 'trf',
-        'ftol': 1e-3,
+        'ftol': 1e-6,
         'xtol': 1e-6,
         'gtol': 1e-6,
         'x_scale': 'jac',
@@ -207,7 +207,7 @@ repro_jax_po_single = {
     # 'interpolate_high_error': After a first optimization run, interpolate position and orientation of
     #  high error frames as initialization for next optimization. Error is distance
     #  between marked and reprojected point. Deactivate with -1
-    'interpolate_high_error': 100,  # 15,
+    'interpolate_high_error': -1,  # 15,
     # 'interpolate_close_marker': After first optimization run, interpolate any position that is closer
     # than this value to a labeled feature.
     # Deactivate with -1

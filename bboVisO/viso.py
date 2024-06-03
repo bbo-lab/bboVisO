@@ -21,6 +21,7 @@ def infer_position_attitude(times, calibs, opts,
                             landmark_imcoords=None, landmark_vecs=None,
                             landmarks_init=None, positions_init=None, oris_flu_init=None,
                             landmarks_optimize=None, landmarks_far=None, landmarks_weights=None):
+
     # Fill landmark_imcoords from landmark_vecs or vice-versa
     landmark_imcoords, landmark_vecs = fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs)
 
@@ -68,6 +69,7 @@ def infer_position_attitude(times, calibs, opts,
                 assert set(opt).issubset(["positions", "oris"]), ("Single frames can only be optimized for position "
                                                                   "and orientation")
 
+
                 if positions_init is None:
                     positions_init = np.full((landmark_imcoords.shape[1], 3), np.nan)
                 if oris_flu_init is None:
@@ -78,7 +80,7 @@ def infer_position_attitude(times, calibs, opts,
 
                 for i_fr in range(landmark_imcoords.shape[1]):  # TODO parallelize
                     # Run optimization
-                    if positions_init[i_fr] is None or np.any:
+                    if positions_init[i_fr] is None or np.any(np.isnan(positions_init[i_fr])):
                         p_init = None
                     else:
                         p_init = positions_init[(i_fr,),]
@@ -106,10 +108,11 @@ def infer_position_attitude(times, calibs, opts,
                     cost_pre.append(np.sum(error ** 2) / 2)
                     if i_fr == 0:
                         t_objfun = time.time()
-                        method.objfun_wrapper(vars_free, objfun_args)
-                        print(f"Objective function evaluation took {time.time() - t_objfun}s")
+                        x = method.objfun_wrapper(vars_free, objfun_args)
+                        print(f"Objective function evaluation took {time.time() - t_objfun}s, value: {np.sum(x**2)}")
 
                         time_jacobian(iter_opts["optimization"]["jac"], vars_free, objfun_args)
+
 
                     min_result: OptimizeResult = least_squares(method.objfun_wrapper,
                                                                vars_free,
@@ -124,6 +127,7 @@ def infer_position_attitude(times, calibs, opts,
                 print()
             else:
                 print(f"Optimizing {opt} - Joined")
+
                 vars_free, objfun_args, optim_args = make_optim_input(calibs, iter_opts,
                                                                       landmarks_init, positions_init, oris_flu_init,
                                                                       optimize=opt,
@@ -134,8 +138,8 @@ def infer_position_attitude(times, calibs, opts,
 
                 error = method.objfun_wrapper(vars_free, objfun_args)
                 t_objfun = time.time()
-                method.objfun_wrapper(vars_free, objfun_args)
-                print(f"Objective function evaluation took {time.time() - t_objfun}s")
+                x = method.objfun_wrapper(vars_free, objfun_args)
+                print(f"Objective function evaluation took {time.time() - t_objfun}s, value: {np.sum(x**2)}")
                 cost_pre = np.sum(error ** 2) / 2
 
                 time_jacobian(iter_opts["optimization"]["jac"], vars_free, objfun_args)
