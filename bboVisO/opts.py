@@ -221,7 +221,7 @@ repro_jax_po_single = {
     # individually
     'optimize_single_frames': True,
     # With 'optimize_single_frames' True, initialize on previous frame
-    'optimize_single_init_prev': True,
+    'optimize_single_init_prev': False,
     # object stays in one position, only estimate single position + rotations
     'single_position': False,
     # initial positions are lifted by this factor
