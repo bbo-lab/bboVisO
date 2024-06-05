@@ -1,5 +1,7 @@
 import importlib
+import os
 import sys
+# import sys
 import time
 
 import jax
@@ -9,10 +11,14 @@ from scipy.optimize import least_squares, OptimizeResult
 import concurrent.futures
 from functools import partial
 
+from tqdm import tqdm
+
 from bboVisO.helper import realign_by_distant_features, update_calibs_extrinsics
 from bboVisO.initialization import make_optim_input, fill_landmark_imcoords_vecs
 from bboVisO.interpolation import interpolate_high_error, interpolate_close_marker
 from bboVisO.unravel import unravel_vars
+
+from calibcamlib.camerasystem import strip_calibs
 
 debug = False
 # single precision is insufficient for numerica gradients  # TODO: Make optional
@@ -23,6 +29,10 @@ def infer_position_attitude(times, calibs, opts,
                             landmark_imcoords=None, landmark_vecs=None,
                             landmarks_init=None, positions_init=None, oris_flu_init=None,
                             landmarks_optimize=None, landmarks_far=None, landmarks_weights=None):
+
+    # Remove unnecessary stuff from calibs
+    calibs = strip_calibs(calibs)
+
     # Fill landmark_imcoords from landmark_vecs or vice-versa
     landmark_imcoords, landmark_vecs = fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs)
 
@@ -82,79 +92,56 @@ def infer_position_attitude(times, calibs, opts,
                 frame_slice_generator = (slice(None))
                 n_slices = 1
 
-            frame_slice_prev = None
             positions_prev = positions_init  # overall positions
             cost = np.full((n_slices, 2), np.nan)
 
-            # Timing output
-            # vars_free, objfun_args, optim_args = (
-            #     make_optim_input(calibs, iter_opts,
-            #                      landmarks_init,
-            #                      positions_init[frame_slice],
-            #                      oris_flu_init[frame_slice],
-            #                      optimize=opt,
-            #                      landmarks_optimize=landmarks_optimize,
-            #                      landmarks_far=landmarks_far,
-            #                      landmarks_weights=landmarks_weights,
-            #                      landmark_imcoords=landmark_imcoords[:, frame_slice],
-            #                      landmark_vecs=landmark_vecs[:, frame_slice]))
-            #
-            # t_objfun = time.time()
-            # x = method.objfun_wrapper(vars_free, objfun_args)
-            # print(f"Objective function evaluation took {time.time() - t_objfun}s, value: {np.sum(x ** 2)}")
-            # time_jacobian(iter_opts["optimization"]["jac"], vars_free, objfun_args)
+            partial_optimize_frame_slice = partial(optimize_frame_slice,
+                                                   calibs=calibs,
+                                                   iter_opts=iter_opts,
+                                                   landmarks_init=landmarks_init,
+                                                   optimize=opt,
+                                                   landmarks_optimize=landmarks_optimize,
+                                                   landmarks_far=landmarks_far,
+                                                   landmarks_weights=landmarks_weights,
+                                                   obj_func=method.objfun_wrapper)
 
-            def optimize_frame_slice(my_slice):
-                return my_slice, 1, 1
+            if ("parallelize" in iter_opts and iter_opts["parallelize"]) or True:
+                with (concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count()//2) as executor):
+                    futures = {executor.submit(partial_optimize_frame_slice, (positions_init[frame_slice],
+                                                                              oris_flu_init[frame_slice],
+                                                                              landmark_imcoords[:, frame_slice],
+                                                                              landmark_vecs[:,
+                                                                              frame_slice])): frame_slice
+                               for frame_slice in frame_slice_generator}
 
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                futures = {executor.submit(optimize_frame_slice, frame_slice):
-                               frame_slice for frame_slice in frame_slice_generator}
+                    with tqdm(total=n_slices) as pbar:
+                        for future in concurrent.futures.as_completed(futures):
+                            # frame_slice = futures[future]
+                            # slice_result, slice_cost = future.result()
+                            #
+                            # update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
+                            #                       positions_init, oris_flu_init, calibs, cost, opt)
 
-                for future in concurrent.futures.as_completed(futures):
-                    frame_slice, results = future.result()
-                    landmarks_init = results[0]
-                    positions_init[frame_slice], oris_flu_init[frame_slice] = results[1:3]
-                    cam_rotvecs, cam_ts = results[3:5]
+                            pbar.update(1)
 
-                    calibs = update_calibs_extrinsics(calibs, cam_rotvecs, cam_ts)
+                    for future in futures:
+                        frame_slice = futures[future]
+                        slice_result, slice_cost = future.result()
 
-            for i_frame_slice, frame_slice in enumerate(frame_slice_generator):  # TODO parallelize
-                vars_free, objfun_args, optim_args = (
-                    make_optim_input(calibs, iter_opts,
-                                     landmarks_init,
-                                     positions_init[frame_slice],
-                                     oris_flu_init[frame_slice],
-                                     optimize=opt,
-                                     landmarks_optimize=landmarks_optimize,
-                                     landmarks_far=landmarks_far,
-                                     landmarks_weights=landmarks_weights,
-                                     landmark_imcoords=landmark_imcoords[:, frame_slice],
-                                     landmark_vecs=landmark_vecs[:, frame_slice]))
+                        update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
+                                              positions_init, oris_flu_init, calibs, cost, opt)
+            else:
+                with tqdm(total=n_slices) as pbar:
+                    for frame_slice in frame_slice_generator:
+                        slice_result, slice_cost = partial_optimize_frame_slice((positions_init[frame_slice],
+                                                                                 oris_flu_init[frame_slice],
+                                                                                 landmark_imcoords[:, frame_slice],
+                                                                                 landmark_vecs[:, frame_slice]))
 
-                error = method.objfun_wrapper(vars_free, objfun_args)
-                cost_pre = np.sum(error ** 2) / 2
+                        update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
+                                              positions_init, oris_flu_init, calibs, cost, opt)
 
-                min_result: OptimizeResult = least_squares(method.objfun_wrapper,
-                                                           vars_free,
-                                                           args=[objfun_args],
-                                                           **optim_args,
-                                                           **iter_opts["optimization"]
-                                                           )
-                cost[i_frame_slice] = np.array([cost_pre, np.sum(method.objfun_wrapper(min_result.x, objfun_args) ** 2) / 2])
-
-                results = unravel_vars(min_result.x, objfun_args)
-                landmarks_init = results[0]
-                positions_init[frame_slice], oris_flu_init[frame_slice] = results[1:3]
-                cam_rotvecs, cam_ts = results[3:5]
-
-                calibs = update_calibs_extrinsics(calibs, cam_rotvecs, cam_ts)
-
-                frame_slice_prev = frame_slice
-
-                print(".", end="")
-                sys.stdout.flush()
-            print()
+                        pbar.update(1)
 
             # Normalize e.g. too long vectors from multiple revolutions
             oris_flu_init = R.from_rotvec(oris_flu_init).as_rotvec()
@@ -183,3 +170,49 @@ def time_jacobian(jac, vars_free, objfun_args):
         t_jac = time.time()
         jac(vars_free, objfun_args)
         print(f"Jacobian evaluation took {time.time() - t_jac}s")
+
+
+def optimize_frame_slice(sliced_inputs, calibs, iter_opts, landmarks_init, optimize,
+                         landmarks_optimize, landmarks_far, landmarks_weights,
+                         obj_func):
+    positions_init, oris_flu_init, landmark_imcoords, landmark_vecs = sliced_inputs
+    vars_free, objfun_args, optim_args = (
+        make_optim_input(calibs, iter_opts,
+                         landmarks_init,
+                         positions_init,  # [frame_slice]
+                         oris_flu_init,  # [frame_slice]
+                         optimize=optimize,
+                         landmarks_optimize=landmarks_optimize,
+                         landmarks_far=landmarks_far,
+                         landmarks_weights=landmarks_weights,
+                         landmark_imcoords=landmark_imcoords,  # [:, frame_slice]
+                         landmark_vecs=landmark_vecs))  # [:, frame_slice]
+
+    error = obj_func(vars_free, objfun_args)
+    cost_pre = np.sum(error ** 2) / 2
+
+    min_result: OptimizeResult = least_squares(obj_func,
+                                               vars_free,
+                                               args=[objfun_args],
+                                               **optim_args,
+                                               **iter_opts["optimization"]
+                                               )
+    cost = np.array([cost_pre, np.sum(obj_func(min_result.x, objfun_args) ** 2) / 2])
+    result = unravel_vars(min_result.x, objfun_args)
+
+    return result, cost
+
+
+def update_slices_inplace(frame_slice, slice_result, slice_cost,
+                          landmarks_init, positions_init, oris_flu_init, calibs, cost,
+                          opt):
+    # Fill results into full arrays
+    cost[frame_slice, :] = slice_cost
+    if "landmarks" in opt:
+        landmarks_init[:] = slice_result[0]
+    if "positions" in opt:
+        positions_init[frame_slice] = slice_result[1]
+    if "oris" in opt:
+        oris_flu_init[frame_slice] = slice_result[2]
+    if "extrinsics_r" in opt or "extrinsics_t" in opt:
+        update_calibs_extrinsics(calibs, slice_result[3], slice_result[4])

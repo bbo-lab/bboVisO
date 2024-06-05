@@ -7,6 +7,7 @@ from bboVisO.geometry import build_vector_bundle
 from bboVisO.helper import landmark_vecs_from_imcoords, landmark_imcoords_from_vecs, get_var_edges
 from bboVisO.method_switches import make_jacobian_sparsity_mask
 
+import warnings
 
 def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None,
                      optimize=None, landmarks_optimize=None, landmarks_far=None, landmarks_weights=None,
@@ -71,7 +72,9 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
     k = landmark_vecs.shape[1]
     n = landmark_vecs.shape[2]
 
-    landmark_vectors_sphere = np.nanmean(landmark_vecs, axis=0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        landmark_vectors_sphere = np.nanmean(landmark_vecs, axis=0)
 
     if opts["single_position"]:
         k_p = 1
