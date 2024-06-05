@@ -89,63 +89,63 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
     # cs = Camerasystem.from_calibs(calibs)
     # cs.cameras[0]["camera"].set_center_pixel(np.array([[960, 512]]))
 
-    # Initializations
-    if landmarks is not None:
-        landmarks_init = landmarks
-        #
-        # for i_lm, lm in enumerate(landmarks):
-        #     if np.any(np.isnan(lm)):
-        #         if landmark_vecs[:,:,i_lm]
+    if landmarks is None:
+        landmarks = np.full((n,), np.nan)
+    if positions is None:
+        positions = np.full((k,), np.nan)
+    if oris_flu is None:
+        oris_flu = np.full((k,), np.nan)
 
-    else:
-        # Initialize to a distance of 100m into the direction of the  respective camera vectors
-        landmarks_init = build_vector_bundle(landmark_vectors_sphere[0], landmark_vectors_sphere[1:]) * 100
+    landmarks_init = landmarks
+    positions_init = positions
+    oris_flu_init = oris_flu
 
-    if positions is not None and not np.all(np.isnan(positions)):
-        positions_init = positions  # TODO: Implement single position
-    else:
+    # Initialize nan positions
+    if np.any(nan_mask := np.any(np.isnan(positions_init), axis=-1)):
         # Calculate mean of all non-far landmarks
-        landmarks_close_mean = np.nanmean(landmarks_init[~landmarks_far], axis=0)
-        # Lift by lift factor. For cameras with limited FOV, this will ensure that as many landmarks as possible are
+        landmarks_close_mean = np.nanmean(landmarks_init[~landmarks_far], axis=0, keepdims=True)
+        # Lift by lift factor. For cameras with limited FOV, this will help that as many landmarks as possible are
         # in the image by moving the camera further away
-        landmarks_close_mean[2] += np.nanmean(
+        landmarks_close_mean[:, 2] += np.nanmean(
             np.linalg.norm(landmarks_init[~landmarks_far] - landmarks_close_mean, axis=-1)
         ) * opts["lift_factor"]
         # If we have a lifted mean, initialize with that ...
         if np.any(~landmarks_far) and not np.any(np.isnan(landmarks_close_mean)):
-            positions_init = np.ones((k, 3)) * landmarks_close_mean
+            positions_init[nan_mask] = landmarks_close_mean
         # ... else initialize to coordinate origin
         else:
             print("Initialized with coordinate origin. This is probably undesirable.")
-            positions_init = np.zeros((k, 3))  # We initialize to the size of orientations, even for single position
+            positions_init[nan_mask] = np.zeros((1, 3))
 
-    if oris_flu is not None and not np.all(np.isnan(oris_flu)):
-        oris_flu_init = oris_flu
-    else:
+    # Initialize nan orientations
+    if np.any(nan_mask := np.any(np.isnan(oris_flu_init), axis=-1)):
         # Initialize to zero
-        oris_flu_init = np.zeros((k, 3))
+        oris_flu_init[nan_mask] = np.zeros((1, 3))
 
         # Initialize other orientation to landmark vecs
         # TODO: Only optimize on 2 vectors that have the most similar angle as the reference (as proxy for "far away")
         # TODO: Move the reference iteratively
-        for i in range(k):
-            frame_landmark_vectors = landmarks_init - positions_init[i]
+        for lm_idx in np.where(nan_mask)[0]:
+            frame_landmark_vectors = landmarks_init - positions_init[lm_idx]
             frame_landmark_vectors /= np.linalg.norm(frame_landmark_vectors, axis=-1, keepdims=True)
             landmark_vec_mask = ~np.any(np.isnan(frame_landmark_vectors), axis=-1)
-            cam_vec_mask = ~np.any(np.isnan(landmark_vectors_sphere[i]), axis=-1)
+            cam_vec_mask = ~np.any(np.isnan(landmark_vectors_sphere[lm_idx]), axis=-1)
             common_mask = landmark_vec_mask & cam_vec_mask
 
-            oris_flu_init[i] = R.align_vectors(
-                frame_landmark_vectors[common_mask], landmark_vectors_sphere[i][common_mask]
+            oris_flu_init[lm_idx] = R.align_vectors(
+                frame_landmark_vectors[common_mask], landmark_vectors_sphere[lm_idx][common_mask]
             )[0].as_rotvec()
 
+    # Initialize camera extrinsics
     extrinsics_rotations_init = np.array([c["rvec_cam"] for c in calibs])
     extrinsics_translations_init = np.array([c["tvec_cam"] for c in calibs])
 
-    # Fill nan landmarks as good as possible
-    for lm_idx, lm in enumerate(landmarks_init):
-        if np.any(np.isnan(lm)):
-            lm[:] = intersect(positions_init, landmark_vectors_sphere[:, lm_idx])
+    # Initialize nan landmarks
+    if np.any(nan_mask := np.any(np.isnan(landmarks_init), axis=-1)):
+        # Fill nans with preliminary triangulations
+        for lm_idx in np.where(nan_mask)[0]:
+            # TODO take camera position into account
+            landmarks_init[lm_idx] = intersect(positions_init, landmark_vectors_sphere[:, lm_idx])
 
     if opts["single_position"]:
         positions_init = positions_init[(0,),]
