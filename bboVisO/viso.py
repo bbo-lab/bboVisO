@@ -11,6 +11,7 @@ from bboVisO.helper import realign_by_distant_features, update_calibs_extrinsics
 from bboVisO.initialization import make_optim_input, fill_landmark_imcoords_vecs
 from bboVisO.interpolation import interpolate_high_error, interpolate_close_marker
 from bboVisO.unravel import unravel_vars
+import tqdm
 
 debug = False
 # single precision is insufficient for numerica gradients  # TODO: Make optional
@@ -78,7 +79,7 @@ def infer_position_attitude(times, calibs, opts,
                 # Previous positions
                 positions_prev = positions_init
 
-                for i_fr in range(landmark_imcoords.shape[1]):  # TODO parallelize
+                for i_fr in tqdm.trange(landmark_imcoords.shape[1]):  # TODO parallelize
                     # Run optimization
                     if positions_init[i_fr] is None or np.any(np.isnan(positions_init[i_fr])):
                         p_init = None
@@ -122,8 +123,6 @@ def infer_position_attitude(times, calibs, opts,
                                                                )
                     cost.append(np.sum(method.objfun_wrapper(min_result.x, objfun_args) ** 2) / 2)
                     positions_init[i_fr], oris_flu_init[i_fr] = unravel_vars(min_result.x, objfun_args)[1:3]
-                    print(".", end="")
-                    sys.stdout.flush()
                 print()
             else:
                 print(f"Optimizing {opt} - Joined")
