@@ -93,11 +93,11 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
     # cs.cameras[0]["camera"].set_center_pixel(np.array([[960, 512]]))
 
     if landmarks is None:
-        landmarks = np.full((n,), np.nan)
+        landmarks = np.full((n, 3), np.nan)
     if positions is None:
-        positions = np.full((k,), np.nan)
+        positions = np.full((k, 3), np.nan)
     if oris_flu is None:
-        oris_flu = np.full((k,), np.nan)
+        oris_flu = np.full((k, 3), np.nan)
 
     landmarks_init = landmarks
     positions_init = positions

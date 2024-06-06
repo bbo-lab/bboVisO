@@ -29,7 +29,6 @@ def infer_position_attitude(times, calibs, opts,
                             landmark_imcoords=None, landmark_vecs=None,
                             landmarks_init=None, positions_init=None, oris_flu_init=None,
                             landmarks_optimize=None, landmarks_far=None, landmarks_weights=None):
-
     # Remove unnecessary stuff from calibs
     calibs = strip_calibs(calibs)
 
@@ -37,9 +36,9 @@ def infer_position_attitude(times, calibs, opts,
     landmark_imcoords, landmark_vecs = fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs)
 
     if positions_init is None:
-        positions_init = np.full((landmark_imcoords.shape[1]), np.nan)
+        positions_init = np.full((landmark_imcoords.shape[1], 3), np.nan)
     if oris_flu_init is None:
-        oris_flu_init = np.full((landmark_imcoords.shape[1]), np.nan)
+        oris_flu_init = np.full((landmark_imcoords.shape[1], 3), np.nan)
 
     # Timing
     t = time.time()
@@ -60,7 +59,7 @@ def infer_position_attitude(times, calibs, opts,
         for i_opti, opt in enumerate(iter_opts["optimize"]):
             # Interpolate high errors
             if (iter_opts["interpolate_high_error"] and iter_opts["interpolate_high_error"] != -1 and
-                    positions_init is not None and oris_flu_init is not None):
+                    not np.all(np.isnan(positions_init)) and not np.all(np.isnan(oris_flu_init))):
                 print(f"Interpolating high errors")
                 # This might help to get the system out of local minima in case of wrong markings.
                 # The last step is always an optimization, though. The check_gui also implements this
@@ -81,18 +80,16 @@ def infer_position_attitude(times, calibs, opts,
                                                                          opts=iter_opts,
                                                                          landmarks=landmarks_init)
 
-            if iter_opts["optimize_single_frames"]:
-                assert set(opt).issubset(["positions", "oris"]), \
-                    "Single frames can only be optimized for position and orientation"
-                print(f"Optimizing {opt} - Single frames")
-                frame_slice_generator = (slice(fr, fr + 1) for fr in range(landmark_imcoords.shape[1]))
-                n_slices = landmark_imcoords.shape[1]
-            else:
-                print(f"Optimizing {opt} - Joined")
-                frame_slice_generator = (slice(None))
-                n_slices = 1
+            assert iter_opts["frame_batch_size"] > 1 or set(opt).issubset(["positions", "oris"]), \
+                "Single frames can only be optimized for position and orientation"
+            batch_size = iter_opts["frame_batch_size"]
+            frame_step = iter_opts["frame_batch_step"]
+            print(f'Optimizing {opt} - Batch size {batch_size} - Step {frame_step}')
+            n_slices = int(np.ceil(len(positions_init)/iter_opts["frame_batch_size"]))
+            frame_slice_generator = (slice(int(b_idx*batch_size), int((b_idx + 1)*batch_size), int(frame_step))
+                                     for b_idx in range(n_slices))
 
-            positions_prev = positions_init  # overall positions
+            positions_prev = positions_init.copy()  # overall positions
             cost = np.full((n_slices, 2), np.nan)
 
             partial_optimize_frame_slice = partial(optimize_frame_slice,
@@ -105,8 +102,8 @@ def infer_position_attitude(times, calibs, opts,
                                                    landmarks_weights=landmarks_weights,
                                                    obj_func=method.objfun_wrapper)
 
-            if ("parallelize" in iter_opts and iter_opts["parallelize"]) or True:
-                with (concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count()//2) as executor):
+            if iter_opts["parallelize"]:
+                with (concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count() // 2) as executor):
                     futures = {executor.submit(partial_optimize_frame_slice, (positions_init[frame_slice],
                                                                               oris_flu_init[frame_slice],
                                                                               landmark_imcoords[:, frame_slice],
@@ -116,20 +113,14 @@ def infer_position_attitude(times, calibs, opts,
 
                     with tqdm(total=n_slices) as pbar:
                         for future in concurrent.futures.as_completed(futures):
-                            # frame_slice = futures[future]
-                            # slice_result, slice_cost = future.result()
-                            #
-                            # update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
-                            #                       positions_init, oris_flu_init, calibs, cost, opt)
+                            frame_slice = futures[future]
+                            slice_result, slice_cost = future.result()
+
+                            update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
+                                                  positions_init, oris_flu_init, calibs, cost, opt)
 
                             pbar.update(1)
 
-                    for future in futures:
-                        frame_slice = futures[future]
-                        slice_result, slice_cost = future.result()
-
-                        update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
-                                              positions_init, oris_flu_init, calibs, cost, opt)
             else:
                 with tqdm(total=n_slices) as pbar:
                     for frame_slice in frame_slice_generator:
@@ -148,10 +139,9 @@ def infer_position_attitude(times, calibs, opts,
 
             # Calculate and display position shift
             max_pos_shift = np.nanmax(np.linalg.norm((positions_prev - positions_init), axis=-1))
-            print(f"Max pos shift {max_pos_shift}")
+            print(f"Max pos shift {max_pos_shift:.6f}")
 
-            print("Cost reduced from", np.round(np.sum(np.array(cost[-1][0])), 2), "to",
-                  np.round(np.sum(np.array(cost[-1][1])), 2))
+            print(f"Cost reduced from {np.nansum(np.array(cost[:, 0])):.2f} to {np.nansum(np.array(cost[:, 1])):.2f}")
 
     if opts["iterations"][-1]["realign_by_distant_features"]:
         print("realign_by_distant_features")

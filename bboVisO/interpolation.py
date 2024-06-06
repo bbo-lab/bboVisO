@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 from calibcamlib.camerasystem import Camerasystem
 from scipy.interpolate import interp1d
@@ -18,8 +20,10 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
     abserrors = np.sqrt(np.nansum(objfun_error ** 2, axis=-1))
     abserrors[abserrors == 0] = np.nan
 
-    frame_errors_max = np.nanmax(abserrors, axis=(0, -1))
-    frame_errors_median = np.nanmedian(abserrors, axis=(0, -1))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        frame_errors_max = np.nanmax(abserrors, axis=(0, -1))
+        frame_errors_median = np.nanmedian(abserrors, axis=(0, -1))
     low_error_mask = frame_errors_max < opts['interpolate_high_error']
     low_error_mask[(0, -1),] = True  # We never want extrapolation
     #
@@ -38,10 +42,12 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
     objfun_error_interp = objfun_runner_repro(
         landmarks, positions_interp, oris_flu_interp, landmark_imcoords, calibs, opts
     )
-    abserrors_interp = np.sqrt(np.nansum(objfun_error_interp ** 2, axis=-1))
-    abserrors_interp[abserrors_interp == 0] = np.nan
-    frame_errors_max_interp = np.nanmax(abserrors_interp, axis=(0, -1))
-    frame_errors_median_interp = np.nanmedian(abserrors_interp, axis=(0, -1))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        abserrors_interp = np.sqrt(np.nansum(objfun_error_interp ** 2, axis=-1))
+        abserrors_interp[abserrors_interp == 0] = np.nan
+        frame_errors_max_interp = np.nanmax(abserrors_interp, axis=(0, -1))
+        frame_errors_median_interp = np.nanmedian(abserrors_interp, axis=(0, -1))
     low_error_mask_interp = frame_errors_max_interp < opts['interpolate_high_error']
 
     # We never want to make the max or median error worse

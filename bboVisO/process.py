@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 
 import bboVisO.viso as viso
@@ -108,10 +110,12 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
 
     abserr = np.sqrt(np.sum(error_repro ** 2, axis=-1))
     error_n = min(len(time_base), 4)
-    print(
-        f"Highest mean error time: {time_base[np.argpartition(np.nanmean(abserr, axis=-1), -error_n)[-error_n:]]}")
-    print(
-        f"Highest max error time: {time_base[np.argpartition(np.nanmax(abserr, axis=-1), -error_n)[-error_n:]]}")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        print(f"Highest mean error time: "
+              f"{time_base[np.argpartition(np.nanmean(abserr, axis=-1), -error_n)[-error_n:]]}")
+        print(f"Highest max error time: "
+              f"{time_base[np.argpartition(np.nanmax(abserr, axis=-1), -error_n)[-error_n:]]}")
 
     landmarks, positions, oris_flu = (landmarks_opt, positions_opt, oris_flu_opt)
 

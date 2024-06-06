@@ -62,26 +62,26 @@ class bboVisOchecker(QMainWindow):
 
         viso_positions_pd = pd.read_csv(path / f"cam_positions.csv", sep="\t")
         self.viso_positions = np.array([
-            viso_positions_pd["x0"],
-            viso_positions_pd["y0"],
-            viso_positions_pd["z0"],
+            viso_positions_pd["x"],
+            viso_positions_pd["y"],
+            viso_positions_pd["z"],
         ]).T
 
         viso_orientations_pd = pd.read_csv(path / f"cam_orientations.csv", sep="\t")
         viso_orientations_q = np.array([
-            viso_orientations_pd["x0"],
-            viso_orientations_pd["y0"],
-            viso_orientations_pd["z0"],
-            viso_orientations_pd["w0"],
+            viso_orientations_pd["x"],
+            viso_orientations_pd["y"],
+            viso_orientations_pd["z"],
+            viso_orientations_pd["w"],
         ]).T
         self.viso_orientations = R.from_quat(viso_orientations_q)
 
         viso_landmarks_pd = pd.read_csv(path / f"landmarks.csv", sep="\t")
         self.landmark_labels = list(viso_landmarks_pd["landmark"])
         self.landmark_coords3d = np.array([
-            viso_landmarks_pd["x0"],
-            viso_landmarks_pd["y0"],
-            viso_landmarks_pd["z0"],
+            viso_landmarks_pd["x"],
+            viso_landmarks_pd["y"],
+            viso_landmarks_pd["z"],
         ]).T
 
         self.viso_times = np.array(viso_positions_pd["t_us"])
@@ -197,7 +197,7 @@ class bboVisOchecker(QMainWindow):
 
     def open_readers(self):
         print("Opening readers ... ", end="")
-        self.readers = [get_reader(v.as_posix(), backend="iio") for v in self.data["videos"]]
+        self.readers = [get_reader(v, backend="iio") for v in self.data["videos"]]
         self.frame_dimensions = [r.get_data(0).shape for r in self.readers]
         print("done")
 
