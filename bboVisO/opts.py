@@ -79,6 +79,8 @@ def default_iter_opts():
         'sparse_jacobian': False,
         # Parallelize over batches
         'parallelize': False,
+        # Weight to apply to residuals for interpolated image coordinates
+        'interpolated_weight': 0.2
     }
 
 

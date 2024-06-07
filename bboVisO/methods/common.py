@@ -8,8 +8,8 @@ from ..helper import get_var_edges
 
 def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> np.ndarray:
     unraveled_vars = unravel_func(free_vars, args)
-    landmarks, positions, oris_flu, cam_rotvecs, cam_ts, marker_var, lm_weights = unraveled_vars[:7]
-    extra_args = unraveled_vars[7:]
+    landmarks, positions, oris_flu, cam_rotvecs, cam_ts, marker_var, lm_weights, mask_weights = unraveled_vars[:8]
+    extra_args = unraveled_vars[8:]
 
     sm, sk, sn = marker_var.shape[:3]
 
@@ -50,7 +50,8 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
             start_idx = i_n * element_length
             element_mask = mask[start_idx:(start_idx + element_length)]
             j = np.array(jacs[jac_idx](landmarks[(i_n,),], positions, oris_flu, cam_rotvecs, cam_ts,
-                                       marker_var[:, :, (i_n,)], lm_weights[:, :, (i_n,)], *extra_args))
+                                       marker_var[:, :, (i_n,)], lm_weights[:, :, (i_n,)], mask_weights[:, :, (i_n,)],
+                                       *extra_args))
             j = j[..., element_mask]
 
             en_cols = np.sum(element_mask)
@@ -92,7 +93,7 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
                 element_mask = mask[start_idx:(start_idx + element_length)]
 
                 j = np.array(jacs[jac_idx](landmarks, positions[(i_k,),], oris_flu[(i_k,),], cam_rotvecs, cam_ts,
-                                           marker_var[:, (i_k,)], lm_weights, *extra_args))
+                                           marker_var[:, (i_k,)], lm_weights, mask_weights[:, (i_k,)], *extra_args))
                 j = j[..., element_mask]
 
                 en_cols = np.sum(element_mask)
@@ -115,7 +116,7 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
     for jac_idx in range(3, len(jacs)):
         mask = args['mask_opt'][edges[jac_idx]:edges[jac_idx + 1]]
         j = np.array(jacs[jac_idx](landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
-                                   marker_var, lm_weights, *extra_args).reshape(result_size, -1))
+                                   marker_var, lm_weights, mask_weights, *extra_args).reshape(result_size, -1))
         j[np.isnan(j)] = 0  # Possibly arccos numerically > 1?
         jacs_sparse.append(csr_matrix(j[:, mask]))
 

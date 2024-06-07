@@ -55,11 +55,17 @@ def unravel_vars(free_vars, args):
     landmarks, positions, oris_flu, cam_rotvecs, cam_ts = unravel_vars_base(free_vars, args)
 
     landmark_vecs = args["landmark_vecs"]
-    lm_close_pen_weight = args["lm_close_pen_weight"]
     lm_weights = args["landmarks_weights"]
 
-    return (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
-            landmark_vecs, lm_weights, lm_close_pen_weight)
+    weight_mask = args["weight_mask"]
+    weight = args["weight"]
+    mask_weight = np.ones_like(weight_mask)
+    mask_weight[weight_mask] = weight
+
+    lm_close_pen_weight = args["lm_close_pen_weight"]
+
+    return (landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_vecs, lm_weights, mask_weight,
+            lm_close_pen_weight)
 
 
 jacobians_angular = None

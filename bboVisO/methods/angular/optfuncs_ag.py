@@ -2,7 +2,8 @@ from jax import numpy as np
 
 from bboVisO.methods.common_ag import world_to_camerasystem, camerasystem_to_cameras
 
-def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_vecs, lm_weights, lm_close_pen_weight):
+def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_vecs,
+           lm_weights, mask_weight, lm_close_pen_weight):
     # Transform landmarks into coordinate system of camera system
     landmark_coords = world_to_camerasystem(landmarks, positions, oris_flu)
 
@@ -14,7 +15,10 @@ def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_vecs, l
 
     errors_ang = np.arccos(np.sum(landmark_coords * landmark_vecs, axis=-1, keepdims=True))
 
-    # Apply weights
+    # Apply mask weights
+    errors_ang *= mask_weight
+
+    # Apply landmark weights
     errors_ang *= lm_weights
 
     # We lightly penalize positions too close to landmarks

@@ -9,12 +9,24 @@ from bboVisO.method_switches import make_jacobian_sparsity_mask
 
 import warnings
 
-def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None,
-                     optimize=None, landmarks_optimize=None, landmarks_far=None, landmarks_weights=None,
-                     landmark_imcoords=None, landmark_vecs=None):
+
+def make_optim_input(calibs, opts,
+                     landmarks=None,  # Initialization for landmarks
+                     positions=None,  # Initialization for positions
+                     oris_flu=None,  # Initialization for oris_flu
+                     optimize=None,  # Subset of ("landmarks", "positions", "oris", "extrinsics_r", "extrinsics_t")
+                     landmarks_optimize=None,  # Mask of landmarks to optimize
+                     landmarks_far=None,  # Mask for landmarks that are far away
+                     landmarks_weights=None,  # Weight for each landmark
+                     weight_mask=None,  # Mask to apply "weight" to, per imcoord (might get reduced by method)
+                     weight=1,  # Weight for "weight_mask", e.g. to reduce weight of interpolated points
+                     landmark_imcoords=None,  # Landmark image coordinates
+                     landmark_vecs=None):  # Corresponding vectors to "landmark_imcoords", in single cam coords
 
     if landmarks_weights is None:
         landmarks_weights = np.ones((len(landmarks),))
+    if weight_mask is None:
+        weight_mask = np.ones_like(landmark_imcoords, dtype=bool)
 
     landmark_imcoords, landmark_vecs = fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs)
 
@@ -34,14 +46,16 @@ def make_optim_input(calibs, opts, landmarks=None, positions=None, oris_flu=None
         'mask_opt': mask_free_input,  # Mask of free vars within all vars
         'landmark_imcoords': landmark_imcoords,
         'landmark_vecs': landmark_vecs,
-        'landmarks_weights': landmarks_weights[np.newaxis, np.newaxis, :, np.newaxis], # Reshape for later mult.
+        'landmarks_weights': landmarks_weights[np.newaxis, np.newaxis, :, np.newaxis],  # Reshape for later mult.
+        'weight_mask': np.any(weight_mask, axis=-1, keepdims=True),
+        'weight': weight,
         'single_position': opts["single_position"],
         'calibs': calibs,
         'camera_positions': t_c2w,
         'lm_close_pen_weight': opts["lm_close_pen_weight"],
     }
 
-    if not opts["single_position"] and opts["sparse_jacobian"] :
+    if not opts["single_position"] and opts["sparse_jacobian"]:
         jac_sparsity = make_jacobian_sparsity_mask(opts)(m, k, n, mask_free_input)
     else:
         jac_sparsity = None  # TODO: implement

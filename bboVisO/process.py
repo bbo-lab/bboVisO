@@ -65,15 +65,14 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     #                                                                           calibs,
     #                                                                           1.01*np.median(np.diff(time_bases)),
     #                                                                           time_base, time_bases)
-    landmark_imcoords, landmark_vecs, time_base = interpolate_imcoords(landmark_imcoords_orig, time_base, calibs,
-                                                                       time_bases)
-
-    # landmark_imcoords[0] = np.nan
+    landmark_imcoords, landmark_vecs, time_base, imcoords_interp_mask = (
+        interpolate_imcoords(landmark_imcoords_orig, time_base, calibs, time_bases))
 
     # Cut down to points with sufficient landmarks per opts["min_labels"]. Less than 4 is ill-defined
     sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) >= opts["min_labels"]
     time_base = time_base[sufficient_mask]
     landmark_imcoords = landmark_imcoords[:, sufficient_mask]
+    imcoords_interp_mask = imcoords_interp_mask[:, sufficient_mask]
     landmark_vecs = landmark_vecs[:, sufficient_mask]
 
     # ====== Section for in-place testing ======
@@ -99,6 +98,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                      landmarks_optimize=landmarks_optimize[landmarks_mask],
                                      landmarks_far=landmarks_far[landmarks_mask],
                                      landmarks_weights=landmarks_weights,
+                                     imcoords_interp_mask=imcoords_interp_mask,
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
 

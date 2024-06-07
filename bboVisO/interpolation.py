@@ -109,12 +109,13 @@ def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
 
     pretimes = time_base[1:] - time_base[:-1]
 
+    sub_time_base_members = []
     for i_c, vecs_cam in enumerate(vecs_cams):
         # create mask of frames that belong to one of the sub_time_bases that make up the array_time_base
         if sub_time_bases is None:
-            sub_time_base_members = np.ones_like(time_base, dtype=bool)
+            sub_time_base_members.append(np.ones_like(time_base, dtype=bool))
         else:
-            sub_time_base_members = np.isin(time_base, sub_time_bases[i_c])
+            sub_time_base_members.append(np.isin(time_base, sub_time_bases[i_c]))
 
         vecs_cam_interp = (vecs_cam[:-2] * pretimes[1:][..., np.newaxis, np.newaxis] +
                            vecs_cam[2:] * pretimes[:-1][..., np.newaxis, np.newaxis])
@@ -122,12 +123,14 @@ def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
 
         # This changes cam_vecs IN PLACE!, replacing only the values previously nan
         vecs_cam_ireg = vecs_cam[1:-1]
-        mask = np.isnan(vecs_cam_ireg) & (~sub_time_base_members[1:-1, np.newaxis, np.newaxis])
+        mask = np.isnan(vecs_cam_ireg) & (~sub_time_base_members[-1][1:-1, np.newaxis, np.newaxis])
         vecs_cam_ireg[mask] = vecs_cam_interp[mask]
 
     imcoords_interp = landmark_imcoords_from_vecs(vecs_cams, calibs)
+    interpolation_mask = np.zeros_like(imcoords, dtype=bool)
+    interpolation_mask[np.array(sub_time_base_members)] = True
 
-    return imcoords_interp, vecs_cams, time_base
+    return imcoords_interp, vecs_cams, time_base, interpolation_mask
 
 
 def interpolate_imcoords_rebase(array_2d, array_time_base, calibs, dt, time_base=None):

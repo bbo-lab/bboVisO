@@ -28,7 +28,8 @@ jax.config.update("jax_enable_x64", True)
 def infer_position_attitude(times, calibs, opts,
                             landmark_imcoords=None, landmark_vecs=None,
                             landmarks_init=None, positions_init=None, oris_flu_init=None,
-                            landmarks_optimize=None, landmarks_far=None, landmarks_weights=None):
+                            landmarks_optimize=None, landmarks_far=None, landmarks_weights=None,
+                            imcoords_interp_mask=None):
     # Remove unnecessary stuff from calibs
     calibs = strip_calibs(calibs)
 
@@ -85,8 +86,8 @@ def infer_position_attitude(times, calibs, opts,
             batch_size = iter_opts["frame_batch_size"]
             frame_step = iter_opts["frame_batch_step"]
             print(f'Optimizing {opt} - Batch size {batch_size} - Step {frame_step}')
-            n_slices = int(np.ceil(len(positions_init)/iter_opts["frame_batch_size"]))
-            frame_slice_generator = (slice(int(b_idx*batch_size), int((b_idx + 1)*batch_size), int(frame_step))
+            n_slices = int(np.ceil(len(positions_init) / iter_opts["frame_batch_size"]))
+            frame_slice_generator = (slice(int(b_idx * batch_size), int((b_idx + 1) * batch_size), int(frame_step))
                                      for b_idx in range(n_slices))
 
             positions_prev = positions_init.copy()  # overall positions
@@ -104,12 +105,13 @@ def infer_position_attitude(times, calibs, opts,
 
             if iter_opts["parallelize"]:
                 with (concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count() // 2) as executor):
-                    futures = {executor.submit(partial_optimize_frame_slice, (positions_init[frame_slice],
-                                                                              oris_flu_init[frame_slice],
-                                                                              landmark_imcoords[:, frame_slice],
-                                                                              landmark_vecs[:,
-                                                                              frame_slice])): frame_slice
-                               for frame_slice in frame_slice_generator}
+                    futures = {executor.submit(
+                        partial_optimize_frame_slice, (positions_init[frame_slice],
+                                                       oris_flu_init[frame_slice],
+                                                       landmark_imcoords[:, frame_slice],
+                                                       landmark_vecs[:, frame_slice],
+                                                       imcoords_interp_mask[:, frame_slice])
+                    ): frame_slice for frame_slice in frame_slice_generator}
 
                     with tqdm(total=n_slices) as pbar:
                         for future in concurrent.futures.as_completed(futures):
@@ -127,7 +129,8 @@ def infer_position_attitude(times, calibs, opts,
                         slice_result, slice_cost = partial_optimize_frame_slice((positions_init[frame_slice],
                                                                                  oris_flu_init[frame_slice],
                                                                                  landmark_imcoords[:, frame_slice],
-                                                                                 landmark_vecs[:, frame_slice]))
+                                                                                 landmark_vecs[:, frame_slice],
+                                                                                 imcoords_interp_mask[:, frame_slice]))
 
                         update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
                                               positions_init, oris_flu_init, calibs, cost, opt)
@@ -165,7 +168,7 @@ def time_jacobian(jac, vars_free, objfun_args):
 def optimize_frame_slice(sliced_inputs, calibs, iter_opts, landmarks_init, optimize,
                          landmarks_optimize, landmarks_far, landmarks_weights,
                          obj_func):
-    positions_init, oris_flu_init, landmark_imcoords, landmark_vecs = sliced_inputs
+    positions_init, oris_flu_init, landmark_imcoords, landmark_vecs, imcoords_interp_mask = sliced_inputs
     vars_free, objfun_args, optim_args = (
         make_optim_input(calibs, iter_opts,
                          landmarks_init,
@@ -175,6 +178,8 @@ def optimize_frame_slice(sliced_inputs, calibs, iter_opts, landmarks_init, optim
                          landmarks_optimize=landmarks_optimize,
                          landmarks_far=landmarks_far,
                          landmarks_weights=landmarks_weights,
+                         weight_mask=imcoords_interp_mask,
+                         weight=iter_opts["interpolated_weight"],
                          landmark_imcoords=landmark_imcoords,  # [:, frame_slice]
                          landmark_vecs=landmark_vecs))  # [:, frame_slice]
 
