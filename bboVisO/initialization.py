@@ -118,7 +118,7 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
     oris_flu_init = oris_flu
 
     # Initialize nan positions
-    if np.any(nan_mask := np.any(np.isnan(positions_init), axis=-1)):
+    if "positions" in optimize and np.any(nan_mask := np.any(np.isnan(positions_init), axis=-1)):
         # Calculate mean of all non-far landmarks
         landmarks_close_mean = np.nanmean(landmarks_init[~landmarks_far], axis=0, keepdims=True)
         # Lift by lift factor. For cameras with limited FOV, this will help that as many landmarks as possible are
@@ -135,7 +135,7 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
             positions_init[nan_mask] = np.zeros((1, 3))
 
     # Initialize nan orientations
-    if np.any(nan_mask := np.any(np.isnan(oris_flu_init), axis=-1)):
+    if "oris" in optimize and np.any(nan_mask := np.any(np.isnan(oris_flu_init), axis=-1)):
         # Initialize to zero
         oris_flu_init[nan_mask] = np.zeros((1, 3))
 
@@ -158,7 +158,7 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
     extrinsics_translations_init = np.array([c["tvec_cam"] for c in calibs])
 
     # Initialize nan landmarks
-    if np.any(nan_mask := np.any(np.isnan(landmarks_init), axis=-1)):
+    if "landmarks" in optimize and np.any(nan_mask := np.any(np.isnan(landmarks_init), axis=-1)):
         # Fill nans with preliminary triangulations
         for lm_idx in np.where(nan_mask)[0]:
             # TODO take camera position into account
