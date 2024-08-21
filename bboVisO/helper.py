@@ -60,6 +60,7 @@ def landmarks_to_array(landmark_coordinates, detected_labels):
             landmarks_far.append(False)
             landmarks_use.append(False)
             landmarks_identity.append(landmark_coordinates["landmarks"][ln]["identity"])
+            landmarks_weights.append(landmark_coordinates["landmarks"][ln].get("weight", 1))
             continue
 
         landmarks_identity.append(None)

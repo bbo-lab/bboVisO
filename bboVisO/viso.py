@@ -59,6 +59,8 @@ def infer_position_attitude(times, calibs, opts,
         # Iterate through optimization steps
         for i_opti, opt in enumerate(iter_opts["optimize"]):
             # Interpolate high errors
+            print("1 ", np.sum(np.isnan(positions_init)), np.sum(np.isnan(oris_flu_init)), np.sum(np.isnan(landmarks_init)),
+                  np.sum(np.isinf(positions_init)), np.sum(np.isinf(oris_flu_init)), np.sum(np.isinf(landmarks_init)))
             if (iter_opts["interpolate_high_error"] and iter_opts["interpolate_high_error"] != -1 and
                     not np.all(np.isnan(positions_init)) and not np.all(np.isnan(oris_flu_init))):
                 print(f"Interpolating high errors")
@@ -92,6 +94,18 @@ def infer_position_attitude(times, calibs, opts,
 
             positions_prev = positions_init.copy()  # overall positions
             cost = np.full((n_slices, 2), np.nan)
+            print("2 ", np.sum(np.isnan(positions_init)), np.sum(np.isnan(oris_flu_init)),
+                  np.sum(np.isnan(landmarks_init)),
+                  np.sum(np.isinf(positions_init)), np.sum(np.isinf(oris_flu_init)), np.sum(np.isinf(landmarks_init)))
+
+            # if iter_opts["parallelize"]:
+            #     print("Overwrote frame_slice_generator")
+            #     frame_range = range(13400, 13500)
+            #     n_slices = len(list(frame_range))
+            #     frame_slice_generator = (slice(int(b_idx * batch_size), int((b_idx + 1) * batch_size), int(frame_step))
+            #                              for b_idx in frame_range)
+            #     iter_opts["parallelize"] = False
+            # iter_opts["parallelize"] = False
 
             partial_optimize_frame_slice = partial(optimize_frame_slice,
                                                    calibs=calibs,
@@ -110,7 +124,8 @@ def infer_position_attitude(times, calibs, opts,
                                                        oris_flu_init[frame_slice],
                                                        landmark_imcoords[:, frame_slice],
                                                        landmark_vecs[:, frame_slice],
-                                                       imcoords_interp_mask[:, frame_slice])
+                                                       imcoords_interp_mask[:, frame_slice]
+                                                       if imcoords_interp_mask is not None else None,)
                     ): frame_slice for frame_slice in frame_slice_generator}
 
                     with tqdm(total=n_slices) as pbar:
@@ -126,11 +141,12 @@ def infer_position_attitude(times, calibs, opts,
             else:
                 with tqdm(total=n_slices) as pbar:
                     for frame_slice in frame_slice_generator:
-                        slice_result, slice_cost = partial_optimize_frame_slice((positions_init[frame_slice],
-                                                                                 oris_flu_init[frame_slice],
-                                                                                 landmark_imcoords[:, frame_slice],
-                                                                                 landmark_vecs[:, frame_slice],
-                                                                                 imcoords_interp_mask[:, frame_slice]))
+                        slice_result, slice_cost = partial_optimize_frame_slice(
+                            (positions_init[frame_slice],
+                             oris_flu_init[frame_slice],
+                             landmark_imcoords[:, frame_slice],
+                             landmark_vecs[:, frame_slice],
+                             imcoords_interp_mask[:, frame_slice] if imcoords_interp_mask is not None else None,))
 
                         update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
                                               positions_init, oris_flu_init, calibs, cost, opt)

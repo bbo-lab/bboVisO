@@ -34,9 +34,9 @@ def default_iter_opts():
     return {
         'optimization': {
             'method': 'trf',
-            'ftol': 1e-8,
-            'xtol': 1e-8,
-            'gtol': 1e-8,
+            'ftol': 1e-7,
+            'xtol': 1e-7,
+            'gtol': 1e-7,
             'x_scale': 'jac',
             'loss': 'linear',
             'tr_solver': 'lsmr',
@@ -86,9 +86,9 @@ def default_iter_opts():
 
 def default_repro_iter_opts():
     iter_opts = default_iter_opts()
-    iter_opts['optimization']['ftol'] = 1e-8
-    iter_opts['optimization']['gtol'] = 1e-8
-    iter_opts['optimization']['xtol'] = 1e-8
+    iter_opts['optimization']['ftol'] = 1e-7
+    iter_opts['optimization']['gtol'] = 1e-7
+    iter_opts['optimization']['xtol'] = 1e-7
     iter_opts['optimization']['verbose'] = 2
     iter_opts['objective_function'] = 'repro'
     return iter_opts
@@ -154,4 +154,11 @@ def angular_jax_po_b1_s1():
     iter_opts['frame_batch_step'] = int(1)
     iter_opts['frame_batch_size'] = int(1)
     iter_opts['parallelize'] = True
+    return iter_opts
+
+
+def angular_jax_po_b1_s1_nointerp():
+    iter_opts = angular_jax_po_b1_s1()
+    iter_opts['optimization']['max_nfev'] = 2000
+    iter_opts['interpolate_high_error'] = -1
     return iter_opts

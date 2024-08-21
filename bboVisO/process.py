@@ -97,8 +97,8 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                      oris_flu_init=oris_flu_opt,
                                      landmarks_optimize=landmarks_optimize[landmarks_mask],
                                      landmarks_far=landmarks_far[landmarks_mask],
-                                     landmarks_weights=landmarks_weights,
-                                     imcoords_interp_mask=imcoords_interp_mask,
+                                     landmarks_weights=landmarks_weights[landmarks_mask],
+                                     imcoords_interp_mask=imcoords_interp_mask[:, :, landmarks_mask],
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
 

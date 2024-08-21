@@ -19,9 +19,9 @@ from bboVisO.output import save_to_text
 from bboVisO.visualisation import plot_frames
 from calibcam import yaml_helper
 
-
 # single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!
-# jax.config.update("jax_enable_x64", True)
+import jax
+jax.config.update("jax_enable_x64", True)
 
 
 def main():
