@@ -27,6 +27,7 @@ matplotlib.use('Qt5Agg')
 class bboVisOchecker(QMainWindow):
     def __init__(self, data, opts):
         super().__init__()
+        i = 0
 
         self.components = {
             'main': {},
@@ -105,17 +106,19 @@ class bboVisOchecker(QMainWindow):
         # detected_labels = [d for d in detected_labels if d in self.landmark_labels]
 
         if "cam_time_bases" in data:
-            self.cam_time_bases = [ct[self.landmark_frames] for ct in data["cam_time_bases"]]
+            cam_time_bases = data["cam_time_bases"]
         else:
-            self.cam_time_bases = helper.get_cam_time_bases(self.landmark_frames, data["cam_fps"], data["cam_offsets"],
+            cam_time_bases = helper.get_cam_time_bases(self.landmark_frames[-1], data["cam_fps"], data["cam_offsets"],
                                                             self.opts)
 
+        self.detected_times = [t[self.landmark_frames] for t in cam_time_bases]
+
         self.landmark_imcoords, self.times = label_lib.to_numpy(label_data, self.landmark_frames, self.landmark_labels,
-                                                                time_bases=self.cam_time_bases,
+                                                                time_bases=self.detected_times,
                                                                 label_identity=landmarks_identity)
 
         self.landmark_imcoords = bboVisO.interpolation.interpolate_imcoords(self.landmark_imcoords, self.times, self.calibs,
-                                                                            self.cam_time_bases)[0]
+                                                                            self.detected_times)[0]
         # self.landmark_imcoords[1] = np.nan
 
         self.time_idx = 0
@@ -135,13 +138,13 @@ class bboVisOchecker(QMainWindow):
         self.time_idx = idx
         time = self.times[self.time_idx]
 
-        cam_mask = np.array([np.isin(time, ctb) for ctb in self.cam_time_bases])
+        cam_mask = np.array([np.isin(time, ctb) for ctb in self.detected_times])
         avail_cam_idxs = np.where(cam_mask)[0]
         if switch_cam and self.cam_idx not in avail_cam_idxs:
             self.set_cam_idx(avail_cam_idxs[0], update_time=False)
 
         # Set camera frame for time point
-        cam_idxs = np.where(self.cam_time_bases[self.cam_idx] == self.times[self.time_idx])[0]
+        cam_idxs = np.where(self.detected_times[self.cam_idx] == self.times[self.time_idx])[0]
         if len(cam_idxs) > 0:
             self.cam_frame_idx = cam_idxs[0]
             landmark_frame = self.landmark_frames[self.cam_frame_idx]
@@ -166,7 +169,7 @@ class bboVisOchecker(QMainWindow):
             self.update_frame()
 
     def set_cam_frame_idx(self, idx, update_frame=True):
-        time = self.cam_time_bases[self.cam_idx][np.min((len(self.cam_time_bases[self.cam_idx]) - 1, idx))]
+        time = self.detected_times[self.cam_idx][np.min((len(self.detected_times[self.cam_idx]) - 1, idx))]
         time_idx = np.argmin(np.abs(self.times - time))
         self.set_time_idx(time_idx, update_frame)
 
@@ -197,7 +200,7 @@ class bboVisOchecker(QMainWindow):
 
     def open_readers(self):
         print("Opening readers ... ", end="")
-        self.readers = [get_reader(v, backend="iio") for v in self.data["videos"]]
+        self.readers = [get_reader(Path(v).as_posix(), backend="iio") for v in self.data["videos"]]
         self.frame_dimensions = [r.get_data(0).shape for r in self.readers]
         print("done")
 
@@ -243,7 +246,7 @@ class bboVisOchecker(QMainWindow):
         cam_layout = QHBoxLayout()
         # Dropdown
         self.components["controls"]["dropdown_cams"] = QComboBox()
-        self.components["controls"]["dropdown_cams"].addItems([str(i) for i, _ in enumerate(self.cam_time_bases)])
+        self.components["controls"]["dropdown_cams"].addItems([str(i) for i, _ in enumerate(self.detected_times)])
         cam_layout.addWidget(self.components["controls"]["dropdown_cams"])
 
         self.components["controls"]["button_fr_prev"] = QPushButton("<")
@@ -324,7 +327,7 @@ class bboVisOchecker(QMainWindow):
             self.set_cam_frame_idx(self.cam_frame_idx)
             return
 
-        time = self.cam_time_bases[self.cam_idx][cam_time_idx]
+        time = self.detected_times[self.cam_idx][cam_time_idx]
 
         self.set_time(time)
 
@@ -333,7 +336,7 @@ class bboVisOchecker(QMainWindow):
         self.set_cam_idx(int(selected_option))
 
     def update_frame(self):
-        cam_mask = np.array([np.isin(self.times[self.time_idx], ctb) for ctb in self.cam_time_bases])
+        cam_mask = np.array([np.isin(self.times[self.time_idx], ctb) for ctb in self.detected_times])
         avail_cam_idxs = np.where(cam_mask)[0]
         if self.cam_idx in avail_cam_idxs:
             img = self.readers[self.cam_idx].get_data(self.landmark_frames[self.cam_frame_idx])

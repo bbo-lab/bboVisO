@@ -17,7 +17,7 @@ import bboVisO.viso as viso
 from bboVisO.helper import get_cam_time_bases
 from bboVisO.output import save_to_text
 from bboVisO.visualisation import plot_frames
-from calibcam import yaml_helper
+from calibcamlib import yaml_helper
 
 # single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!
 import jax
@@ -111,10 +111,10 @@ def main():
             # Assign times to landmark frames ...
             if "cam_time_bases" in data:
                 # ... either from directly supplied frame times
-                cam_time_bases = [ct[landmark_frames] for ct in data["cam_time_bases"]]
+                cam_time_bases = data["cam_time_bases"]
             else:
                 # ... or from FPS
-                cam_time_bases = get_cam_time_bases(landmark_frames, data["cam_fps"], data["cam_offsets"], opts)
+                cam_time_bases = get_cam_time_bases(landmark_frames[-1], data["cam_fps"], data["cam_offsets"], opts)
 
             # Offset time bases of cameras
             cam_time_bases = [(ct + ao).astype(opts["time_dtype"]) for ct, ao in

@@ -5,7 +5,7 @@ from scipy.spatial.transform import Rotation as R
 from bbo.geometry import RigidTransform
 
 
-def get_cam_time_bases(frame_idxs, cam_fps, cam_offsets, opts):
+def get_cam_time_bases(max_frame, cam_fps, cam_offsets, opts):
     offsets = (np.array(cam_offsets)).astype(np.uint64)
 
     cam_time_bases = []
@@ -16,7 +16,7 @@ def get_cam_time_bases(frame_idxs, cam_fps, cam_offsets, opts):
         if offset_fr - np.round(offset_fr) < 0.01:
             offset_fr = np.round(offset_fr)
 
-        cam_time_bases.append(((frame_idxs.astype(float) + offset_fr) / fps).astype(np.uint64))
+        cam_time_bases.append(((np.arange(max_frame).astype(float) + offset_fr) / fps).astype(np.uint64))
 
     # Adjust time that are just off by 1us from float rounding, to not create an additional measurement
     for i_cam in range(1, len(cam_time_bases)):

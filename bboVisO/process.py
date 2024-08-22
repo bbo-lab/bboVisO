@@ -25,12 +25,12 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     detected_frames = label_lib.get_labeled_frame_idxs(landmark_labels, label_set=labels)
     print(len(detected_frames))
 
+    detected_times = [t[detected_frames] for t in time_bases]
+
     # Marked labels
     detected_labels = sorted(label_lib.get_labels(landmark_labels))
+    # Reduce labels to those that are also present as landmarks
     detected_labels = [d for d in detected_labels if d in labels]
-
-    # All marked labels must correspond to a landmark, coordinates may be empty or nan
-    assert set(detected_labels).issubset(labels), "Some detected labels are unknown"
 
     # Convert landmark dictionary to array and extract metadata to masks
     landmarks_all, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_use, landmarks_weights = (
@@ -45,7 +45,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     # n_times is sort(unique()) of all time bases
     # If frame times between cameras do not align, the labels of respective other cameras will be nan
     landmark_imcoords, time_base = label_lib.to_numpy(landmark_labels, detected_frames, labels,
-                                                      time_bases=time_bases,
+                                                      time_bases=detected_times,
                                                       label_identity=landmarks_identity)
 
     # Remove all timepoints in which all cameras are nan
@@ -66,7 +66,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     #                                                                           1.01*np.median(np.diff(time_bases)),
     #                                                                           time_base, time_bases)
     landmark_imcoords, landmark_vecs, time_base, imcoords_interp_mask = (
-        interpolate_imcoords(landmark_imcoords_orig, time_base, calibs, time_bases))
+        interpolate_imcoords(landmark_imcoords_orig, time_base, calibs, sub_time_bases=detected_times))
 
     # Cut down to points with sufficient landmarks per opts["min_labels"]. Less than 4 is ill-defined
     sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) >= opts["min_labels"]

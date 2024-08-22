@@ -134,7 +134,7 @@ def repro_jax_po_b1_s1():
         ["positions", "oris"], ]
     iter_opts['frame_batch_step'] = int(1)
     iter_opts['frame_batch_size'] = int(1)
-    iter_opts['parallelize'] = True
+    iter_opts['parallelize'] = False
     return iter_opts
 
 
@@ -153,7 +153,7 @@ def angular_jax_po_b1_s1():
         ["positions", "oris"], ]
     iter_opts['frame_batch_step'] = int(1)
     iter_opts['frame_batch_size'] = int(1)
-    iter_opts['parallelize'] = True
+    iter_opts['parallelize'] = False
     return iter_opts
 
 
