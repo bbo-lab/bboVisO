@@ -48,7 +48,7 @@ class bboVisOchecker(QMainWindow):
         self.opts = opts
 
         calibration = data["calibration"]
-        self.calibs = np.load(calibration, allow_pickle=True)[()]["calibs"]
+        self.calibs = Camerasystem.load_dict(calibration)["calibs"]
         self.camera_system = Camerasystem.from_calibs(self.calibs)
 
         path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
