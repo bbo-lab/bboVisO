@@ -7,7 +7,7 @@ name = "bbo-viso"
 dynamic = ["version"]
 description = "Simple visual odometry for omnidirectional cameras"
 readme = "README.md"
-license = "LGPL"
+license = "LGPL-3.0-or-later"
 authors = [
     { name = "BBO-lab @ caesar", email = "kay-michael.voit@mpinb.mpg.de" },
 ]
@@ -29,9 +29,13 @@ dependencies = [
 Homepage = "https://github.com/bbo-lab/bboVisO"
 
 [tool.hatch.version]
-path = "bboviso/__init__.py"
+path = "bboVisO/__init__.py"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/bboviso",
+    "/bboVisO",
 ]
+
+[tool.hatch.build.targets.wheel]
+      packages = ["bboVisO"]
+
