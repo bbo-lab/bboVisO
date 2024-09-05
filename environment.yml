@@ -1,6 +1,5 @@
 name: bboVisO
 channels:
-  - defaults
   - conda-forge
 dependencies:
   - python=3.10
@@ -20,4 +19,6 @@ dependencies:
     - bbo-ccvtools
     - bbo-calibcamlib
     - bbo-bbo>=0.1.0
+    - bbo-svidreader
+    - tqdm
 # Also requires tetherless-extractor
