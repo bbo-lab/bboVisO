@@ -108,7 +108,7 @@ class bboVisOchecker(QMainWindow):
         if "cam_time_bases" in data:
             cam_time_bases = data["cam_time_bases"]
         else:
-            cam_time_bases = helper.get_cam_time_bases(self.landmark_frames[-1], data["cam_fps"], data["cam_offsets"],
+            cam_time_bases = helper.get_cam_time_bases(self.landmark_frames[-1]+1, data["cam_fps"], data["cam_offsets"],
                                                             self.opts)
 
         self.detected_times = [t[self.landmark_frames] for t in cam_time_bases]

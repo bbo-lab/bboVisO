@@ -114,7 +114,7 @@ def main():
                 cam_time_bases = data["cam_time_bases"]
             else:
                 # ... or from FPS
-                cam_time_bases = get_cam_time_bases(landmark_frames[-1], data["cam_fps"], data["cam_offsets"], opts)
+                cam_time_bases = get_cam_time_bases(landmark_frames[-1]+1, data["cam_fps"], data["cam_offsets"], opts)
 
             # Offset time bases of cameras
             cam_time_bases = [(ct + ao).astype(opts["time_dtype"]) for ct, ao in
