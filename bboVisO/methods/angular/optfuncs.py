@@ -20,7 +20,6 @@ def objfun_runner(landmarks, positions, oris_flu, landmark_vecs, calibs, opts) -
 def objfun_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
     obfun_inputs = unravel_vars(free_vars, args)
     errors = np.array(jit(objfun)(*obfun_inputs))
-
     if no_ravel:
         return errors
     else:
@@ -42,7 +41,8 @@ def objfun_jacobian_wrapper(free_vars, args) -> np.ndarray:
     jacs = get_jacobians(args)
 
     jac_sparse = objfun_jacobian_wrapper_sparse_common(free_vars, args, jacs, unravel_vars, sd)
-
+    jac_sparse.data[np.isinf(jac_sparse.data)] = 1e9
+    # print(jac_sparse.min(), jac_sparse.max())
     return jac_sparse
 
 
