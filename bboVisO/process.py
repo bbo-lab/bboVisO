@@ -86,7 +86,6 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     landmarks_opt = landmarks_all.copy()
     # ====== /Section for in-place testing ======
 
-    # Optimize p&o, then p&o&l for all used landmarks
     landmarks_mask = landmarks_use
     landmarks_opt_mask, positions_opt, oris_flu_opt, calibs = \
         viso.infer_position_attitude(time_base, calibs, opts,
