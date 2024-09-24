@@ -23,6 +23,7 @@ dependencies = [
     "numpy",
     "scipy",
     "tqdm",
+    "paho-mqtt",
 ]
 
 [project.urls]

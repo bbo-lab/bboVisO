@@ -23,7 +23,7 @@ def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_vecs,
     errors_ang *= lm_weights
 
     # We lightly penalize positions too close to landmarks
-    penalty = lm_close_pen_weight * calc_inverse_lm_pos_distance_sum(landmarks, positions)
-    errors_ang += penalty[np.newaxis, :, np.newaxis, np.newaxis]
+    # penalty = lm_close_pen_weight * calc_inverse_lm_pos_distance_sum(landmarks, positions)
+    # errors_ang += penalty[np.newaxis, :, np.newaxis, np.newaxis]
 
     return errors_ang

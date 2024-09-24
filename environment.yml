@@ -21,4 +21,5 @@ dependencies:
     - bbo-bbo>=0.1.0
     - bbo-svidreader
     - tqdm
+    - paho-mqtt
 # Also requires tetherless-extractor

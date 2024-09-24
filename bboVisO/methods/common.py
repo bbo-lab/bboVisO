@@ -121,7 +121,7 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
         jacs_sparse.append(csr_matrix(j[:, mask]))
 
     jac_sparse = sparse_hstack(jacs_sparse)
-    jac_sparse.data[np.isinf(jac_sparse.data)] = 1e9
+    jac_sparse.data[np.isinf(jac_sparse.data)] = np.sign(jac_sparse.data[np.isinf(jac_sparse.data)]) * 1e9
     return jac_sparse
 
 

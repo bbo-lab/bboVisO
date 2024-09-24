@@ -131,8 +131,15 @@ def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=N
             positions_init[nan_mask] = landmarks_close_mean
         # ... else initialize to coordinate origin
         else:
-            print("Initialized with coordinate origin. This is probably undesirable.")
-            positions_init[nan_mask] = np.zeros((1, 3))
+            print("Initialized with far coordinates. This is possibly undesirable.")
+            landmarks_mean = np.nanmean(landmarks_init, axis=0, keepdims=True)
+            # Lift by lift factor. For cameras with limited FOV, this will help that as many landmarks as possible are
+            # in the image by moving the camera further away
+            landmarks_mean[:, 2] += np.nanmean(
+                np.linalg.norm(landmarks_init - landmarks_mean, axis=-1)
+            ) * opts["lift_factor"]
+
+            positions_init[nan_mask] = landmarks_mean
 
     # Initialize nan orientations
     if "oris" in optimize and np.any(nan_mask := np.any(np.isnan(oris_flu_init), axis=-1)):

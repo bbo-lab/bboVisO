@@ -20,6 +20,6 @@ def camerasystem_to_cameras(landmark_coords, cam_rotvecs, cam_ts):
 
 
 def calc_inverse_lm_pos_distance_sum(landmarks, positions):
-    return np.sum(
+    return np.nansum(
         1 / np.linalg.norm(landmarks[np.newaxis] - positions[:, np.newaxis], axis=-1),
         axis=-1)

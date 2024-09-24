@@ -11,6 +11,9 @@ def get_opts():
             repro_jax_po_b1_s1_nointerp(),
             repro_jax_po_pol_bALL_s10_nointerp(),
             repro_jax_po_b1_s1_nointerp(),
+            repro_jax_po_pol_bALL_s10_nointerp(),
+            repro_jax_po_b1_s1_nointerp(),
+            repro_jax_po_b1_s1_nointerp_2p(),
             # repro_jax_po_pol_bALL_cam(),
         ],
         'time_range': [-sys.maxsize, sys.maxsize],
@@ -81,7 +84,7 @@ def default_iter_opts():
         # Parallelize over batches
         'parallelize': False,
         # Weight to apply to residuals for interpolated image coordinates
-        'interpolated_weight': 0.2
+        'interpolated_weight': 0.8
     }
 
 
@@ -152,6 +155,13 @@ def repro_jax_po_b1_s1_nointerp():
     iter_opts = repro_jax_po_b1_s1()
     iter_opts['optimization']['max_nfev'] = 2000
     iter_opts['interpolate_high_error'] = -1
+    return iter_opts
+
+def repro_jax_po_b1_s1_nointerp_2p():
+    iter_opts = repro_jax_po_b1_s1()
+    iter_opts['optimization']['max_nfev'] = 2000
+    iter_opts['interpolate_high_error'] = -1
+    iter_opts['optimization']['jac'] = '2-point'
     return iter_opts
 
 
