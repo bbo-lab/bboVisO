@@ -20,6 +20,7 @@ from calibcamlib import Camerasystem
 from bboVisO import helper
 
 from bbo import label_lib
+import paho.mqtt.client as mqtt
 
 matplotlib.use('Qt5Agg')
 
@@ -46,6 +47,7 @@ class bboVisOchecker(QMainWindow):
 
         self.data = data
         self.opts = opts
+        self.mqtt_client = None
 
         calibration = data["calibration"]
         self.calibs = Camerasystem.load_dict(calibration)["calibs"]
@@ -134,14 +136,33 @@ class bboVisOchecker(QMainWindow):
         self.set_time_idx(0)
         self.set_cam_idx(0)
 
-    def set_time_idx(self, idx, update_frame=True, switch_cam=False):
+        self.mqtt_connect()
+
+    def mqtt_connect(self):
+        try:
+            self.mqtt_client = mqtt.Client()
+            self.mqtt_client.on_message = self.mqtt_on_message
+            self.mqtt_client.connect("127.0.0.1", 1883, 60)
+            self.mqtt_client.subscribe("bbo/sync/fr_idx")
+            self.mqtt_client.subscribe("bbo/sync/t")
+            self.mqtt_client.loop_start()
+        except ConnectionRefusedError:
+            print("ERROR: No connection to MQTT server.")
+            self.mqtt_client = None
+
+    def set_time_idx(self, idx, update_frame=True, switch_cam=False, mqtt_publish=True):
+        if self.time_idx == idx:
+            if update_frame:
+                self.update_frame()
+            return
+
         self.time_idx = idx
         time = self.times[self.time_idx]
 
         cam_mask = np.array([np.isin(time, ctb) for ctb in self.detected_times])
         avail_cam_idxs = np.where(cam_mask)[0]
         if switch_cam and self.cam_idx not in avail_cam_idxs:
-            self.set_cam_idx(avail_cam_idxs[0], update_time=False)
+            self.set_cam_idx(avail_cam_idxs[0], update_time=False, mqtt_publish=mqtt_publish)
 
         # Set camera frame for time point
         cam_idxs = np.where(self.detected_times[self.cam_idx] == self.times[self.time_idx])[0]
@@ -165,19 +186,42 @@ class bboVisOchecker(QMainWindow):
         self.components["controls"]["edit_t"].setText(str(time))
         self.components["controls"]["edit_t"].blockSignals(False)
 
+        if mqtt_publish:
+            self.mqtt_publish()
+
         if update_frame:
             self.update_frame()
 
-    def set_cam_frame_idx(self, idx, update_frame=True):
-        time = self.detected_times[self.cam_idx][np.min((len(self.detected_times[self.cam_idx]) - 1, idx))]
-        time_idx = np.argmin(np.abs(self.times - time))
-        self.set_time_idx(time_idx, update_frame)
+    def mqtt_publish(self):
+        if self.mqtt_client is not None:
+            try:
+                self.mqtt_client.publish("bbo/sync/t", payload=str(self.times[self.time_idx]))
+                self.mqtt_client.publish("bbo/sync/fr_idx", payload=str(self.landmark_frames[self.cam_frame_idx]))
+            except ConnectionRefusedError:
+                print("ERROR: No connection to MQTT server.")
+                self.mqtt_client = None
 
-    def set_time(self, time, update_frame=True):
-        time_idx = np.argmin(np.abs(self.times - time))
-        self.set_time_idx(time_idx, update_frame)
+    def set_cam_frame(self, fr_idx, update_frame=True, mqtt_publish=True):
+        cam_time_idx = np.where(self.landmark_frames == fr_idx)[0]
+        if len(cam_time_idx) == 0:
+            print("Frame not in viso")
+            cam_time_idx = self.cam_frame_idx
+        else:
+            cam_time_idx = cam_time_idx[0]
+        self.set_cam_frame_idx(cam_time_idx, update_frame=True, mqtt_publish=mqtt_publish)
 
-    def set_cam_idx(self, idx, update_time=True):
+    def set_cam_frame_idx(self, idx, update_frame=True, mqtt_publish=True):
+        cam_time_idx = np.min((len(self.detected_times[self.cam_idx]) - 1, idx))
+
+
+        time = self.detected_times[self.cam_idx][cam_time_idx]
+        self.set_time(time, update_frame=update_frame, mqtt_publish=mqtt_publish)
+
+    def set_time(self, time, update_frame=True, mqtt_publish=True):
+        time_idx = np.argmin(np.abs(self.times - time))
+        self.set_time_idx(time_idx, update_frame, mqtt_publish=mqtt_publish)
+
+    def set_cam_idx(self, idx, update_time=True, mqtt_publish=True):
         self.cam_idx = idx
         #
         # time = self.times[self.time_idx]
@@ -196,7 +240,7 @@ class bboVisOchecker(QMainWindow):
         # self.components["controls"]["dropdown_cams"].blockSignals(False)
         #
         if update_time:
-            self.set_time_idx(self.time_idx)
+            self.set_time_idx(self.time_idx, mqtt_publish=mqtt_publish)
 
     def open_readers(self):
         print("Opening readers ... ", end="")
@@ -315,25 +359,29 @@ class bboVisOchecker(QMainWindow):
         self.set_time_idx(self.components["controls"]["slider_t"].value())  # Divide by 10 to get actual values
 
     def on_edit_t_change(self):
-        value = float(self.components["controls"]["edit_t"].text())
-        self.set_time_idx(np.argmin(np.abs(self.times - value)))
+        time = float(self.components["controls"]["edit_t"].text())
+        self.set_time(time, update_frame=True)
 
     def on_edit_fr_change(self):
         idx = int(self.components["controls"]["edit_fr"].text())
-
-        cam_time_idx = np.where(self.landmark_frames == idx)[0]
-        if len(cam_time_idx) == 0:
-            print("Frame not in viso")
-            self.set_cam_frame_idx(self.cam_frame_idx)
-            return
-
-        time = self.detected_times[self.cam_idx][cam_time_idx]
-
-        self.set_time(time)
+        self.set_cam_frame(idx, update_frame=True)
 
     def on_dropdown_change(self, index):
         selected_option = self.components["controls"]["dropdown_cams"].itemText(index)
         self.set_cam_idx(int(selected_option))
+
+    def mqtt_on_message(self, client, userdata, message):
+        print(f"Received message '{message.payload.decode()}' on topic '{message.topic}'")
+        try:
+            match message.topic:
+                case "bbo/sync/t":
+                    time = float(message.payload.decode())
+                    # self.set_time(time, update_frame=True, mqtt_publish=False)
+                case "bbo/sync/fr_idx":
+                    fr_idx = int(message.payload.decode())
+                    # self.set_cam_frame(fr_idx, update_frame=True, mqtt_publish=False)
+        except Exception as e:
+            print(e)
 
     def update_frame(self):
         cam_mask = np.array([np.isin(self.times[self.time_idx], ctb) for ctb in self.detected_times])
