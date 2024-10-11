@@ -15,6 +15,7 @@ def get_opts():
             repro_jax_po_b1_s1_nointerp(),
             repro_jax_po_b1_s1_nointerp_2p(),
             # repro_jax_po_pol_bALL_cam(),
+            # repro_jax_po_pol_bALL_camt(),
         ],
         'time_range': [-sys.maxsize, sys.maxsize],
         # Require min_labels detected per frame
@@ -122,7 +123,16 @@ def repro_jax_po_pol_bALL_cam():
         ["positions", "oris"],
         ["positions", "oris", "landmarks", "extrinsics_r", "extrinsics_t"],
     ]
-    iter_opts['frame_batch_step'] = int(10)
+    iter_opts['frame_batch_step'] = int(1)
+    return iter_opts
+
+def repro_jax_po_pol_bALL_camt():
+    iter_opts = default_repro_iter_opts()
+    iter_opts['optimize'] = [
+        ["positions", "oris"],
+        ["extrinsics_t"],
+    ]
+    iter_opts['frame_batch_step'] = int(1)
     return iter_opts
 
 def repro_jax_po_pol_bALL_s10_nointerp():

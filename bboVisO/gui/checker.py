@@ -49,11 +49,11 @@ class bboVisOchecker(QMainWindow):
         self.opts = opts
         self.mqtt_client = None
 
-        calibration = data["calibration"]
+        path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
+        print(data["calibration"])
+        calibration = path / f"multicam_calibration_viso.yml"
         self.calibs = Camerasystem.load_dict(calibration)["calibs"]
         self.camera_system = Camerasystem.from_calibs(self.calibs)
-
-        path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
 
         viso_maxerrors_pd = pd.read_csv(path / f"maxerror.csv", sep="\t")
         viso_maxerrors_pd.sort_values('t_us', ascending=True, inplace=True)
@@ -63,7 +63,9 @@ class bboVisOchecker(QMainWindow):
         viso_errors_pd.sort_values('t_us', ascending=True, inplace=True)
         self.viso_errors = np.array(viso_errors_pd[viso_errors_pd.columns[1:]]).T
 
+        print(path / f"cam_positions.csv")
         viso_positions_pd = pd.read_csv(path / f"cam_positions.csv", sep="\t")
+        print(viso_positions_pd)
         self.viso_positions = np.array([
             viso_positions_pd["x"],
             viso_positions_pd["y"],
