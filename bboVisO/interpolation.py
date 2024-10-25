@@ -8,6 +8,7 @@ from scipy.spatial.transform import Rotation as R, Slerp
 from bboVisO.helper import generate_immediate_neighbor_mask, landmark_vecs_from_imcoords, landmark_imcoords_from_vecs
 from bboVisO.methods.repro.optfuncs import objfun_runner as objfun_runner_repro
 
+from bbo.geometry import RigidTransform
 
 def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, optimize,
                            landmark_imcoords=None,
@@ -25,8 +26,7 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
         frame_errors_max = np.nanmax(abserrors, axis=(0, -1))
         frame_errors_median = np.nanmedian(abserrors, axis=(0, -1))
     low_error_mask = frame_errors_max < opts['interpolate_high_error']
-    low_error_mask[(0, -1),] = True  # We never want extrapolation
-    #
+
     # if np.sum(~low_error_mask)/len(low_error_mask)>0.7:
     #     print("Too many high max errors, reverting to median error.")
     #     frame_errors = np.nanmedian(abserrors, axis=-1)
@@ -89,18 +89,10 @@ def interpolate_mask(time, pos, ori, mask):
     if np.sum(mask) / len(mask) < 0.25 or np.sum(mask) == 1:
         return pos, ori
 
-    pos_interp_f = [interp1d(time[mask], p, fill_value='extrapolate') for p in pos[mask].T]
-    pos_interp = np.array([i_f(time) for i_f in pos_interp_f]).T
+    trafo = RigidTransform(ori[mask], pos[mask])
+    trafo_interp = trafo.interpolate(time[mask], fill_boundary="constant")(time)
 
-    mask[0] = True  # Slerp cannot extrapolate
-    mask[-1] = True
-    ori_spline = Slerp(time[mask], ori[mask])
-    # ori_q = ori.as_quat()
-    # ori_q = ori_q * np.sign(ori_q[:, (0,)])
-    # ori_interp_f = [interp1d(time[mask], o, fill_value='extrapolate') for o in ori_q[mask].T]
-    # ori_interp = np.array([i_f(time) for i_f in ori_interp_f]).T
-
-    return pos_interp, ori_spline(time)
+    return trafo_interp.get_translation(), trafo_interp.get_rotation()
 
 
 def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
