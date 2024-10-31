@@ -55,7 +55,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     time_base = time_base[data_idxs[0]:data_idxs[-1] + 1]
 
     # Cut down to desired time range
-    time_base_mask = np.logical_and(opts["time_range"][0] <= time_base, time_base <= opts["time_range"][1])
+    time_base_mask = (opts["time_range"][0] <= time_base) & (time_base <= opts["time_range"][1])
     landmark_imcoords = landmark_imcoords[:, time_base_mask]
     time_base = time_base[time_base_mask]
 

@@ -99,7 +99,7 @@ def main():
 
             # Set time range to process
             for i in range(2):
-                if not args.time_range[i] == -sys.maxsize or args.time_range[i] == sys.maxsize:
+                if args.time_range[i] != -sys.maxsize and args.time_range[i] != sys.maxsize:
                     opts["time_range"][i] = args.time_range[i]
                 elif "time_range" in data:
                     opts["time_range"][i] = data["time_range"][i]
