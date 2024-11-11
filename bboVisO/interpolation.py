@@ -109,9 +109,16 @@ def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
         else:
             sub_time_base_members.append(np.isin(time_base, sub_time_bases[i_c]))
 
-        vecs_cam_interp = (vecs_cam[:-2] * pretimes[:-1][..., np.newaxis, np.newaxis] +
-                           vecs_cam[2:] * pretimes[1:][..., np.newaxis, np.newaxis])
-        vecs_cam_interp /= np.linalg.norm(vecs_cam_interp, axis=-1, keepdims=True)
+        t = (pretimes[:-1] / (pretimes[:-1] + pretimes[1:]))[..., np.newaxis]
+        th = np.arccos(np.clip(np.sum((vecs_cam[:-2] * vecs_cam[2:]) ** 2, axis=-1), -1, 1))
+        vecs_cam_interp = (
+                vecs_cam[:-2] * (np.sin((1 - t) * th) / np.sin(th))[..., np.newaxis] +
+                vecs_cam[2:] * (np.sin(t * th) / np.sin(th))[..., np.newaxis]
+        )  # Slerp
+
+        # vecs_cam_interp_old = (vecs_cam[:-2] * pretimes[:-1][..., np.newaxis, np.newaxis] +
+        #                    vecs_cam[2:] * pretimes[1:][..., np.newaxis, np.newaxis])  # Linear
+        # vecs_cam_interp_old /= np.linalg.norm(vecs_cam_interp_old, axis=-1, keepdims=True)
 
         # This changes cam_vecs IN PLACE!, replacing only the values previously nan
         vecs_cam_ireg = vecs_cam[1:-1]
