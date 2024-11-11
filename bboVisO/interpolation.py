@@ -99,7 +99,7 @@ def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
     # Interpolates time points in array_2d that are not part of sub_time_bases
     vecs_cams = landmark_vecs_from_imcoords(imcoords, calibs)
 
-    pretimes = time_base[1:] - time_base[:-1]
+    pretimes = np.diff(time_base)
 
     sub_time_base_members = []
     for i_c, vecs_cam in enumerate(vecs_cams):
@@ -109,8 +109,8 @@ def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
         else:
             sub_time_base_members.append(np.isin(time_base, sub_time_bases[i_c]))
 
-        vecs_cam_interp = (vecs_cam[:-2] * pretimes[1:][..., np.newaxis, np.newaxis] +
-                           vecs_cam[2:] * pretimes[:-1][..., np.newaxis, np.newaxis])
+        vecs_cam_interp = (vecs_cam[:-2] * pretimes[:-1][..., np.newaxis, np.newaxis] +
+                           vecs_cam[2:] * pretimes[1:][..., np.newaxis, np.newaxis])
         vecs_cam_interp /= np.linalg.norm(vecs_cam_interp, axis=-1, keepdims=True)
 
         # This changes cam_vecs IN PLACE!, replacing only the values previously nan
