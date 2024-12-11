@@ -448,8 +448,8 @@ class bboVisOchecker(QMainWindow):
 
             self.camera_system = Camerasystem.from_calibs(self.calibs)
             imcoords_proj = self.camera_system.project(rel_points)[self.cam_idx]
-            print("Cameralib: ", imcoords_proj)
-            print("Labels: ", imcoords)
+            # print("Cameralib: ", imcoords_proj)
+            # print("Labels: ", imcoords)
 
             imcoords_proj[np.isnan(imcoords)] = np.nan
 

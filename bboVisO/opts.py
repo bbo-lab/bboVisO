@@ -4,17 +4,16 @@ import sys
 def get_opts():
     return {
         'iterations': [
-            angular_jax_po_pol_bALL_s10(),
-            repro_jax_po_pol_bALL_s10(),
+            angular_jax_po_pol_bALL_sALL(),
             angular_jax_po_b1_s1(),
+            angular_jax_po_b1_s1(),
+            angular_jax_po_b1_s1(),
+            angular_jax_po_b1_s1(),
+            repro_jax_po_pol_bALL_s10(),
             repro_jax_po_b1_s1(),
-            repro_jax_po_b1_s1_nointerp(),
             repro_jax_po_pol_bALL_s10_nointerp(),
             repro_jax_po_b1_s1_nointerp(),
-            repro_jax_po_pol_bALL_s10_nointerp(),
-            repro_jax_po_b1_s1(),
-            repro_jax_po_b1_s1_nointerp(),
-            # repro_jax_po_b1_s1_nointerp_2p(),
+            repro_jax_po_b1_s1_nointerp_2p()
             # repro_jax_po_pol_bALL_cam(),
             # repro_jax_po_pol_bALL_camt(),
         ],
@@ -139,6 +138,13 @@ def repro_jax_po_pol_bALL_camt():
 def repro_jax_po_pol_bALL_s10_nointerp():
     iter_opts = default_repro_iter_opts()
     iter_opts['interpolate_high_error'] = -1
+    return iter_opts
+
+def angular_jax_po_pol_bALL_sALL():
+    iter_opts = default_angular_iter_opts()
+    iter_opts['optimize'] = [
+        ["positions", "oris"],
+        ["positions", "oris", "landmarks"], ]
     return iter_opts
 
 
