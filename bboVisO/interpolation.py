@@ -110,7 +110,7 @@ def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
             sub_time_base_members.append(np.isin(time_base, sub_time_bases[i_c]))
 
         t = (pretimes[:-1] / (pretimes[:-1] + pretimes[1:]))[..., np.newaxis]
-        th = np.arccos(np.clip(np.sum((vecs_cam[:-2] * vecs_cam[2:]) ** 2, axis=-1), -1, 1))
+        th = np.arccos(np.clip(np.sum((vecs_cam[:-2] * vecs_cam[2:]), axis=-1), -1, 1))
         vecs_cam_interp = (
                 vecs_cam[:-2] * (np.sin((1 - t) * th) / np.sin(th))[..., np.newaxis] +
                 vecs_cam[2:] * (np.sin(t * th) / np.sin(th))[..., np.newaxis]
