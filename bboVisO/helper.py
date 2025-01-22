@@ -91,12 +91,18 @@ def generate_immediate_neighbor_mask(ts, neighbor_ts, max_dist):
         (ts <= neighbor_ts + max_dist) & (ts >= neighbor_ts), axis=0)
 
 
-def realign_by_distant_features(landmark_coords3d, imcoords, times, positions, orientations, calibs):
+def realign_by_distant_features(landmark_coords3d, imcoords_or_lm_vec, times, positions, orientations, calibs):
     orientations_filtered = orientations.as_quat()
-    landmark_vecs = landmark_vecs_from_imcoords(imcoords, calibs)
+
+    if calibs is None:
+        landmark_vecs = imcoords_or_lm_vec
+    else:
+        landmark_vecs = landmark_vecs_from_imcoords(imcoords_or_lm_vec, calibs)
+    landmark_vecs = np.nanmean(landmark_vecs, axis=0)
+
     no_common = 0
     for i_t, t in enumerate(times):
-        frame_landmark_vectors = landmark_coords3d - positions[i_t]
+        frame_landmark_vectors = landmark_coords3d - positions[np.newaxis, i_t]
         landmark_dists = np.linalg.norm(frame_landmark_vectors, axis=-1, keepdims=True)
         frame_landmark_vectors /= landmark_dists
         landmark_vec_mask = ~np.any(np.isnan(frame_landmark_vectors), axis=-1)
@@ -108,8 +114,8 @@ def realign_by_distant_features(landmark_coords3d, imcoords, times, positions, o
             continue
 
         landmark_dists[~common_mask] = np.nan
-        furthest_mask = landmark_dists[:, 0] >= np.sort(landmark_dists[common_mask, 0])[
-            np.min((int(np.sum(common_mask) / 2), np.sum(common_mask) - 2))]
+        # furthest_mask = landmark_dists[:, 0] >= np.sort(landmark_dists[common_mask, 0])[
+        #     np.min((int(np.sum(common_mask) / 2), np.sum(common_mask) - 2))]
 
         align = R.align_vectors(
             frame_landmark_vectors[common_mask], landmark_vecs[i_t][common_mask]
