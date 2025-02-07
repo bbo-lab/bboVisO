@@ -6,7 +6,7 @@ from bboVisO.helper import get_var_edges, load_func
 
 def ravel_vars(landmark_vecs_cam, opts, landmarks_init, positions_init, oris_flu_init, extrinsics_rotations_init,
                extrinsics_translations_init, landmarks_optimize, optimize):
-    module_name = opts['ravel']['ravel_func'].get('module', default=None)
+    module_name = opts['ravel']['ravel_func'].get('module', None)
     func_name = opts['ravel']['ravel_func']['func']
     func = load_func(func_name, module_name)
 
@@ -18,7 +18,7 @@ def ravel_vars(landmark_vecs_cam, opts, landmarks_init, positions_init, oris_flu
 
 
 def unravel_vars(free_vars, ravel_args):
-    module_name = ravel_args['opts']['unravel_func'].get('module', default=None)
+    module_name = ravel_args['opts']['unravel_func'].get('module', None)
     func_name = ravel_args['opts']['unravel_func']['func']
     func = load_func(func_name, module_name)
 
