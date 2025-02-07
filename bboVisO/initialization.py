@@ -31,9 +31,9 @@ def make_optim_input(calibs, opts,
     landmark_imcoords, landmark_vecs = fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs)
 
     vars_free, vars_full, mask_free_input = \
-        make_initialization(landmark_vecs, calibs, opts, landmarks, positions,
-                            oris_flu,
-                            optimize=optimize, landmarks_optimize=landmarks_optimize, landmarks_far=landmarks_far)
+        make_free_vars(landmark_vecs, calibs, opts, landmarks, positions,
+                       oris_flu,
+                       optimize=optimize, landmarks_optimize=landmarks_optimize, landmarks_far=landmarks_far)
 
     m = landmark_vecs.shape[0]
     k = landmark_vecs.shape[1]
@@ -79,9 +79,9 @@ def fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs):
     return landmark_imcoords, landmark_vecs
 
 
-def make_initialization(landmark_vecs, calibs, opts, landmarks=None, positions=None, oris_flu=None,
-                        landmarks_optimize=None, landmarks_far=None,
-                        optimize=("landmarks", "positions", "oris")):
+def make_free_vars(landmark_vecs, calibs, opts, landmarks=None, positions=None, oris_flu=None,
+                   landmarks_optimize=None, landmarks_far=None,
+                   optimize=("landmarks", "positions", "oris")):
     m = landmark_vecs.shape[0]
     k = landmark_vecs.shape[1]
     n = landmark_vecs.shape[2]

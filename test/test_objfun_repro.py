@@ -3,7 +3,7 @@ import sys
 
 import bboVisO.initialization
 import bboVisO.methods.repro.optfuncs_ag
-import bboVisO.unravel
+import bboVisO.ravel
 import bboVisO.methods.repro
 
 sys.path.insert(0, os.path.dirname(__file__) + "/..")

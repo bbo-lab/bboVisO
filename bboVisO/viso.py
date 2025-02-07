@@ -16,7 +16,7 @@ from tqdm import tqdm
 from bboVisO.helper import realign_by_distant_features, update_calibs_extrinsics
 from bboVisO.initialization import make_optim_input, fill_landmark_imcoords_vecs
 from bboVisO.interpolation import interpolate_high_error, interpolate_close_marker
-from bboVisO.unravel import unravel_vars
+from bboVisO.ravel import unravel_vars
 
 from calibcamlib.camerasystem import strip_calibs
 

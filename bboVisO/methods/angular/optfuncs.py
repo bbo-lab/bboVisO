@@ -6,7 +6,7 @@ from .optfuncs_ag import objfun
 from ..common import (objfun_jacobian_wrapper_sparse as objfun_jacobian_wrapper_sparse_common,
                       objfun_jacobian_wrapper_dense as objfun_jacobian_wrapper_dense_common,
                       make_jacobian_sparsity_mask as make_jacobian_sparsity_mask_common)
-from ...unravel import unravel_vars as unravel_vars_base, unpack_calibs
+from ...ravel import unravel_vars as unravel_vars_base, unpack_calibs
 
 
 def objfun_runner(landmarks, positions, oris_flu, landmark_vecs, calibs, opts) -> np.ndarray:
