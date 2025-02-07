@@ -1,10 +1,34 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-from bboVisO.helper import get_var_edges
+from bboVisO.helper import get_var_edges, load_func
 
 
 def ravel_vars(landmark_vecs_cam, opts, landmarks_init, positions_init, oris_flu_init, extrinsics_rotations_init,
+               extrinsics_translations_init, landmarks_optimize, optimize):
+    module_name = opts['ravel']['ravel_func'].get('module', default=None)
+    func_name = opts['ravel']['ravel_func']['func']
+    func = load_func(func_name, module_name)
+
+    vars_free, ravel_args = func(landmark_vecs_cam, opts, landmarks_init, positions_init, oris_flu_init, extrinsics_rotations_init,
+               extrinsics_translations_init, landmarks_optimize, optimize, **opts['ravel']['ravel_opts'])
+
+    ravel_args['opts'] = opts['ravel']
+    return vars_free, ravel_args
+
+
+def unravel_vars(free_vars, ravel_args):
+    module_name = ravel_args['opts']['unravel_func'].get('module', default=None)
+    func_name = ravel_args['opts']['unravel_func']['func']
+    func = load_func(func_name, module_name)
+
+    landmarks, positions, oris_flu, extrinsics_rotations, extrinsics_translations = (
+        func(free_vars, ravel_args, **ravel_args['opts']['ravel_opts']))
+
+    return landmarks, positions, oris_flu, extrinsics_rotations, extrinsics_translations
+
+
+def default_ravel_vars(landmark_vecs_cam, opts, landmarks_init, positions_init, oris_flu_init, extrinsics_rotations_init,
                extrinsics_translations_init, landmarks_optimize, optimize):
     m = landmark_vecs_cam.shape[0]
     k = landmark_vecs_cam.shape[1]
@@ -79,7 +103,7 @@ def ravel_vars(landmark_vecs_cam, opts, landmarks_init, positions_init, oris_flu
     }
     return vars_free, ravel_args
 
-def unravel_vars(free_vars, ravel_args):
+def default_unravel_vars(free_vars, ravel_args):
     vars_full = ravel_args["vars_full"].copy()
     vars_full[ravel_args["mask_free_input"]] = free_vars
 

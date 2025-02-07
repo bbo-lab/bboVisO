@@ -2,7 +2,7 @@ import sys
 
 
 def get_opts():
-    return {
+    opts = {
         'iterations': [
             angular_jax_po_pol_bALL_sALL(),
             angular_jax_po_b1_s1(),
@@ -31,8 +31,20 @@ def get_opts():
         'checker': {
             # Interpolation threshold for check mode ()
             'interpolate_high_error': 100,
+        },
+        # ravel functions
+        'ravel': {
+            'ravel_func': {'module': 'bboVisO.ravel', 'func': 'default_ravel_vars'},
+            'unravel_func': {'module': 'bboVisO.ravel', 'func': 'default_unravel_vars'},
+            'ravel_opts': {}
         }
     }
+
+    for iteropts in opts['iterations']:
+        if iteropts['ravel'] is None:
+            iteropts['ravel'] = opts['ravel']
+
+    return opts
 
 
 def default_iter_opts():
@@ -85,7 +97,9 @@ def default_iter_opts():
         # Parallelize over batches
         'parallelize': False,
         # Weight to apply to residuals for interpolated image coordinates
-        'interpolated_weight': 0.8
+        'interpolated_weight': 0.8,
+        # ravel functions
+        'ravel': None,
     }
 
 

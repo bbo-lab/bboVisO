@@ -210,7 +210,7 @@ def optimize_frame_slice(sliced_inputs, calibs, iter_opts, landmarks_init, optim
                                                )
     cost = np.array([cost_pre, np.sum(obj_func(min_result.x, objfun_args) ** 2) / 2])
     error = obj_func(vars_free, objfun_args, no_ravel=True)
-    result = unravel_vars(min_result.x, objfun_args)
+    result = unravel_vars(min_result.x, objfun_args["ravel_args"])
 
     return result, cost
 

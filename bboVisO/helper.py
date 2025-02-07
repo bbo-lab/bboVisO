@@ -1,3 +1,5 @@
+import importlib
+
 import numpy as np
 from calibcamlib import Camerasystem
 from scipy.spatial.transform import Rotation as R
@@ -163,3 +165,19 @@ def get_var_edges(m, k, n):
                             ])
     edges = np.cumsum(field_sizes)
     return edges
+
+
+def load_func(func_name, module_name=None):
+    if module_name is not None:
+        try:
+            module = importlib.import_module(module_name)  # Import the module dynamically
+            func = getattr(module, func_name, None)  # Get function from module
+        except ModuleNotFoundError:
+            raise ImportError(f"Module '{module_name}' not found.")
+        except AttributeError:
+            raise ImportError(f"Function '{func_name}' not found in module '{module_name}'.")
+    else:
+        func = globals().get(func_name) or locals().get(func_name)
+    if not callable(func):
+        raise ValueError(f"'{func_name}' is not callable in '{module_name}'.")
+    return func
