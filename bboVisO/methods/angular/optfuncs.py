@@ -52,7 +52,7 @@ def make_jacobian_sparsity_mask(m, k, n, mask_free_input):
 
 
 def unravel_vars(free_vars, args):
-    landmarks, positions, oris_flu, cam_rotvecs, cam_ts = unravel_vars_base(free_vars, args)
+    landmarks, positions, oris_flu, cam_rotvecs, cam_ts = unravel_vars_base(free_vars, args["ravel_args"])
 
     landmark_vecs = args["landmark_vecs"]
     lm_weights = args["landmarks_weights"]

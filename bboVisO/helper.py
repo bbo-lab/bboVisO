@@ -153,10 +153,10 @@ def update_calibs_extrinsics(calibs, cam_rotvecs, cam_ts):
     return calibs
 
 
-def get_var_edges(m, k, k_p, n):
+def get_var_edges(m, k, n):
     field_sizes = np.array([0,
                             n * 3,  # landmarks
-                            k_p * 3,  # positions
+                            k * 3,  # positions
                             k * 3,  # orientations
                             m * 3,  # cam extrinsic rotations
                             m * 3,  # cam extrinsic positions

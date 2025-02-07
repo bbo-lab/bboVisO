@@ -17,9 +17,9 @@ def check_jacobian(jac, fun, x, args, eps=1e-6):
                       ])
 
     free_edges = np.array([0,
-                           np.sum(args["mask_opt"][edges[0]:edges[1]]),
-                           np.sum(args["mask_opt"][edges[0]:edges[2]]),
-                           np.sum(args["mask_opt"][edges[0]:edges[3]]),
+                           np.sum(args["ravel_args"]["mask_free_input"][edges[0]:edges[1]]),
+                           np.sum(args["ravel_args"]["mask_free_input"][edges[0]:edges[2]]),
+                           np.sum(args["ravel_args"]["mask_free_input"][edges[0]:edges[3]]),
                            ])
 
     for i in range(3):

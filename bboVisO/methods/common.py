@@ -7,6 +7,10 @@ from ..helper import get_var_edges
 
 
 def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> np.ndarray:
+    assert "mask_free_input" in args["ravel_args"] and not isinstance(args["ravel_args"]["mask_free_input"], bool), (
+        "Analytical gradient only works for a ravel method that provides a mask to be applied on vars_full")
+    mask_free_input = args["ravel_args"]["mask_free_input"]
+
     unraveled_vars = unravel_func(free_vars, args)
     landmarks, positions, oris_flu, cam_rotvecs, cam_ts, marker_var, lm_weights, mask_weights = unraveled_vars[:8]
     extra_args = unraveled_vars[8:]
@@ -25,12 +29,12 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
 
     result_size = (sm * sk * sn * sd)
 
-    edges = get_var_edges(sm, sk, sk, sn)
+    edges = get_var_edges(sm, sk, sn)
     jacs_sparse = []
 
     # Landmarks
     jac_idx = 0
-    mask = args['mask_opt'][edges[jac_idx]:edges[jac_idx + 1]]
+    mask = mask_free_input[edges[jac_idx]:edges[jac_idx + 1]]
     if not np.any(mask):
         jacs_sparse.append(csr_matrix(([], ([], [])), shape=(result_size, 0)))
     else:
@@ -71,7 +75,7 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
 
     # Positions, orientations
     for jac_idx in range(1, 3):
-        mask = args['mask_opt'][edges[jac_idx]:edges[jac_idx + 1]]
+        mask = mask_free_input[edges[jac_idx]:edges[jac_idx + 1]]
 
         if not np.any(mask):
             jacs_sparse.append(csr_matrix(([], ([], [])), shape=(result_size, 0)))
@@ -114,7 +118,7 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
 
     # cam_rotvecs, cam_ts and potential others, expected to be dense but small matrices
     for jac_idx in range(3, len(jacs)):
-        mask = args['mask_opt'][edges[jac_idx]:edges[jac_idx + 1]]
+        mask = mask_free_input[edges[jac_idx]:edges[jac_idx + 1]]
         j = np.array(jacs[jac_idx](landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
                                    marker_var, lm_weights, mask_weights, *extra_args).reshape(result_size, -1))
         j[np.isnan(j)] = 0  # Possibly arccos numerically > 1?
@@ -126,6 +130,10 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
 
 
 def objfun_jacobian_wrapper_dense(free_vars, args, jacs, unravel_func, sd):
+    assert "mask_free_input" in args["ravel_args"] and not isinstance(args["ravel_args"]["mask_free_input"], bool), (
+        "Analytical gradient only works for a ravel method that provides a mask to be applied on vars_full")
+    mask_free_input = args["ravel_args"]["mask_free_input"]
+
     obfun_inputs = unravel_func(free_vars, args)
     result_shape = obfun_inputs[5].shape[:-1] + (sd,)
 
@@ -144,9 +152,9 @@ def objfun_jacobian_wrapper_dense(free_vars, args, jacs, unravel_func, sd):
         obj_fcn_jacobian,
         axis=4)
     # Ravel variable dimension
-    obj_fcn_jacobian = obj_fcn_jacobian.reshape((np.prod(result_shape), args['mask_opt'].size))
+    obj_fcn_jacobian = obj_fcn_jacobian.reshape((np.prod(result_shape), mask_free_input.size))
     # Dump non-free variables
-    obj_fcn_jacobian = obj_fcn_jacobian[:, args['mask_opt']]
+    obj_fcn_jacobian = obj_fcn_jacobian[:, mask_free_input]
     # There are nans here, but not in the repro wrapper. Why? Possibly arccos numerically > 1?
     obj_fcn_jacobian[np.isnan(obj_fcn_jacobian)] = 0
     return obj_fcn_jacobian

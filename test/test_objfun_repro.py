@@ -54,7 +54,7 @@ class TestObjfunReproClass(VisOTestCase):
             error_wrapper = bboVisO.methods.viso_repro.viso_repro.objfun_repro_wrapper(vars_free, args)
 
             # Test
-            np.testing.assert_allclose(error.ravel(), error_wrapper, rtol=1e-10, atol=1e-10)
+            np.testing.assert_allclose(error.ravel_vars(), error_wrapper, rtol=1e-10, atol=1e-10)
 
 
 if __name__ == '__main__':

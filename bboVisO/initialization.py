@@ -1,11 +1,14 @@
 import numpy as np
 
+from calibcamlib import Camerasystem
 from calibcamlib.helper import intersect
 from scipy.spatial.transform import Rotation as R
 
-from bboVisO.geometry import build_vector_bundle
-from bboVisO.helper import landmark_vecs_from_imcoords, landmark_imcoords_from_vecs, get_var_edges
+from bboVisO.ravel import ravel_vars
+from bboVisO.helper import landmark_vecs_from_imcoords, landmark_imcoords_from_vecs
 from bboVisO.method_switches import make_jacobian_sparsity_mask
+
+from bbo.geometry import RigidTransform
 
 import warnings
 
@@ -28,10 +31,11 @@ def make_optim_input(calibs, opts,
     if weight_mask is None:
         weight_mask = np.ones_like(landmark_imcoords, dtype=bool)
 
+    # Create one landmark_imcoords from landmark_vecs or vice versa if necessary
     landmark_imcoords, landmark_vecs = fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs)
 
-    vars_free, vars_full, mask_free_input = \
-        make_free_vars(landmark_vecs, calibs, opts, landmarks, positions,
+    # Create free variables
+    vars_free, ravel_args = make_free_vars(landmark_vecs, calibs, opts, landmarks, positions,
                        oris_flu,
                        optimize=optimize, landmarks_optimize=landmarks_optimize, landmarks_far=landmarks_far)
 
@@ -39,11 +43,14 @@ def make_optim_input(calibs, opts,
     k = landmark_vecs.shape[1]
     n = landmark_vecs.shape[2]
 
-    t_c2w = np.array([R.from_rotvec(c["rvec_cam"]).apply(-c["tvec_cam"]) for c in calibs])
+    trafo_world2cam = RigidTransform(
+        rotation=np.array([c["rvec_cam"] for c in calibs]),
+        translation=np.array([c["tvec_cam"] for c in calibs]),
+        rotation_type="rotvec"
+    )
 
     obfun_args = {
-        'vars_full': vars_full,  # All possible vars, free vars will be substituted in _free wrapper functions
-        'mask_opt': mask_free_input,  # Mask of free vars within all vars
+        'ravel_args': ravel_args,
         'landmark_imcoords': landmark_imcoords,
         'landmark_vecs': landmark_vecs,
         'landmarks_weights': landmarks_weights[np.newaxis, np.newaxis, :, np.newaxis],  # Reshape for later mult.
@@ -51,7 +58,7 @@ def make_optim_input(calibs, opts,
         'weight': weight,
         'single_position': opts["single_position"],
         'calibs': calibs,
-        'camera_positions': t_c2w,
+        'camera_positions': trafo_world2cam.inv().get_translation(),
         'lm_close_pen_weight': opts["lm_close_pen_weight"],
     }
 
@@ -79,44 +86,48 @@ def fill_landmark_imcoords_vecs(landmark_imcoords, landmark_vecs, calibs):
     return landmark_imcoords, landmark_vecs
 
 
-def make_free_vars(landmark_vecs, calibs, opts, landmarks=None, positions=None, oris_flu=None,
+def make_free_vars(landmark_vecs_cam, calibs, opts, landmarks=None, positions=None, oris_flu=None,
                    landmarks_optimize=None, landmarks_far=None,
                    optimize=("landmarks", "positions", "oris")):
-    m = landmark_vecs.shape[0]
-    k = landmark_vecs.shape[1]
-    n = landmark_vecs.shape[2]
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        landmark_vectors_sphere = np.nanmean(landmark_vecs, axis=0)
+    landmarks_init, positions_init, oris_flu_init, extrinsics_rotations_init, extrinsics_translations_init = initialize_vars(
+        landmark_vecs_cam, calibs, opts, landmarks, positions, oris_flu, landmarks_far, optimize)
 
-    if opts["single_position"]:
-        k_p = 1
-    else:
-        k_p = k
+    vars_free, ravel_args = ravel_vars(landmark_vecs_cam, opts, landmarks_init, positions_init, oris_flu_init,
+                                       extrinsics_rotations_init, extrinsics_translations_init, landmarks_optimize,
+                                       optimize)
 
-    edges = get_var_edges(m, k, k_p, n)
+    return vars_free, ravel_args
 
-    vars_full = np.full(edges[-1], np.nan)
-    mask_free_input = np.ones(vars_full.shape, dtype=bool)
 
-    # Init with fixed first orientation and position
-    # Init landmarks as extensions of t=0 camera vecs
-    # Fix relative x position to landmark 1
-    # cs = Camerasystem.from_calibs(calibs)
-    # cs.cameras[0]["camera"].set_center_pixel(np.array([[960, 512]]))
+def initialize_vars(landmark_vecs_cam, calibs, opts, landmarks, positions, oris_flu, landmarks_far, optimize):
+    m = landmark_vecs_cam.shape[0]
+    k = landmark_vecs_cam.shape[1]
+    n = landmark_vecs_cam.shape[2]
 
     if landmarks is None:
-        landmarks = np.full((n, 3), np.nan)
+        assert "landmarks" not in optimize, "Landmarks need to be provided if they are not optimized"
+        landmarks_init = np.full((n, 3), np.nan)
+    else:
+        landmarks_init = landmarks.copy()
     if positions is None:
-        positions = np.full((k, 3), np.nan)
+        assert "positions" not in optimize, "Positions need to be provided if they are not optimized"
+        positions_init = np.full((k, 3), np.nan)
+    else:
+        positions_init = positions.copy()
     if oris_flu is None:
-        oris_flu = np.full((k, 3), np.nan)
-
-    landmarks_init = landmarks
-    positions_init = positions
-    oris_flu_init = oris_flu
-
+        assert "oris" not in optimize, "Orientations need to be provided if they are not optimized"
+        oris_flu_init = np.full((k, 3), np.nan)
+    else:
+        oris_flu_init = oris_flu.copy()
+    cs = Camerasystem.from_calibs(calibs)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        landmark_vectors_sphere = np.nanmean(
+            np.array([
+                cs.get_camsystem_to_cam_transformation(i_cam).inv().rotate(lmvc)
+                for i_cam, lmvc in enumerate(landmark_vecs_cam)]),
+            axis=0)
     # Initialize nan positions
     if "positions" in optimize and np.any(nan_mask := np.any(np.isnan(positions_init), axis=-1)):
         # Calculate mean of all non-far landmarks
@@ -140,7 +151,6 @@ def make_free_vars(landmark_vecs, calibs, opts, landmarks=None, positions=None, 
             ) * opts["lift_factor"]
 
             positions_init[nan_mask] = landmarks_mean
-
     # Initialize nan orientations
     if "oris" in optimize and np.any(nan_mask := np.any(np.isnan(oris_flu_init), axis=-1)):
         # Initialize to zero
@@ -159,90 +169,14 @@ def make_free_vars(landmark_vecs, calibs, opts, landmarks=None, positions=None, 
             oris_flu_init[lm_idx] = R.align_vectors(
                 frame_landmark_vectors[common_mask], landmark_vectors_sphere[lm_idx][common_mask]
             )[0].as_rotvec()
-
     # Initialize camera extrinsics
     extrinsics_rotations_init = np.array([c["rvec_cam"] for c in calibs])
     extrinsics_translations_init = np.array([c["tvec_cam"] for c in calibs])
-
     # Initialize nan landmarks
     if "landmarks" in optimize and np.any(nan_mask := np.any(np.isnan(landmarks_init), axis=-1)):
         # Fill nans with preliminary triangulations
         for lm_idx in np.where(nan_mask)[0]:
             # TODO take camera position into account
             landmarks_init[lm_idx] = intersect(positions_init, landmark_vectors_sphere[:, lm_idx])
+    return landmarks_init, positions_init, oris_flu_init, extrinsics_rotations_init, extrinsics_translations_init
 
-    if opts["single_position"]:
-        positions_init = positions_init[(0,),]
-
-    vars_full[:] = np.hstack((
-        landmarks_init.ravel(),
-        positions_init.ravel(),
-        oris_flu_init.ravel(),
-        extrinsics_rotations_init.ravel(),
-        extrinsics_translations_init.ravel(),
-    ))
-
-    # Fixed variables
-    landmarks_free = np.ones_like(landmarks_init, dtype=bool)
-    positions_free = np.ones_like(positions_init, dtype=bool)
-    oris_flu_free = np.ones_like(oris_flu_init, dtype=bool)
-    extrinsics_rotations_free = np.ones_like(extrinsics_rotations_init, dtype=bool)
-    extrinsics_translations_free = np.ones_like(extrinsics_translations_init, dtype=bool)
-
-    assert not opts["single_position"] or "landmarks" not in optimize, \
-        "Landmarks cannot be optimized from single position"
-    if "landmarks" not in optimize:
-        assert landmarks is not None, "Landmarks need to be provided if they are not optimized"
-        landmarks_free[:] = False
-    if "positions" not in optimize:
-        assert positions is not None, "Positions need to be provided if they are not optimized"
-        positions_free[:] = False
-    if "oris" not in optimize:
-        assert oris_flu is not None, "Orientations need to be provided if they are not optimized"
-        oris_flu_free[:] = False
-    if "extrinsics_r" not in optimize:
-        extrinsics_rotations_free[:] = False
-    extrinsics_rotations_free[0] = False  # Leave reference cam
-    if "extrinsics_t" not in optimize:
-        extrinsics_translations_free[:] = False
-    extrinsics_translations_free[0] = False  # Leave reference cam
-
-    if landmarks_optimize is not None:
-        landmarks_free[~landmarks_optimize] = False
-
-    if "positions" in optimize and "landmarks" in optimize and "oris" in optimize \
-            and (landmarks_optimize is None or np.sum(~landmarks_optimize) < 3):
-        # If all variables are optimized, we need to fix origin, orientation and scale
-        # Fix first two coordinates of first landmark
-        landmarks_free[0, 0:2] = False
-
-        # Fix t=0 position to 0
-        positions_free[0, :] = False
-
-        # Fix t=0 orientation to eye(3)
-        oris_flu_free[0, :] = False
-    elif "positions" in optimize and "landmarks" in optimize and "oris" not in optimize \
-            and np.sum(~landmarks_optimize) < 3:
-        # This case is missing a scale and an origin
-        raise Exception("Fixed orientations need to be implemented")
-    # elif "positions" not in optimize and "landmarks" in optimize and "oris" in optimize:
-    #     pass
-    # elif "positions" in optimize and "landmarks" not in optimize and "oris" in optimize:
-    #     pass
-    else:
-        pass
-
-    mask_free_input[:] = np.hstack((
-        landmarks_free.ravel(),
-        positions_free.ravel(),
-        oris_flu_free.ravel(),
-        extrinsics_rotations_free.ravel(),
-        extrinsics_translations_free.ravel(),
-    ))
-
-    vars_free = vars_full[mask_free_input]
-
-    if opts["optimization"]["verbose"] > 0:  # TODO: better config option
-        print(f"Optimizing {np.sum(mask_free_input)} of {mask_free_input.size} variables")
-
-    return vars_free, vars_full, mask_free_input
