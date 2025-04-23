@@ -5,7 +5,9 @@ from calibcam import camfunctions_ag as camfuncs_ag
 from bboVisO.methods.common_ag import world_to_camerasystem, camerasystem_to_cameras, calc_inverse_lm_pos_distance_sum
 
 
-def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoords, lm_weights, cam_matrices, ks, xis,
+def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoords,
+           lm_weights, mask_weight,
+           cam_matrices, ks, xis,
            lm_close_pen_weight):
     # Transform landmarks into coordinate system of camera system
     landmark_coords = world_to_camerasystem(landmarks, positions, oris_flu)
@@ -23,7 +25,10 @@ def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoord
 
     errors2d = np.abs(landmark_coords - landmark_imcoords)
 
-    # Apply weights
+    # Apply mask weights
+    errors2d *= mask_weight
+
+    # Apply landmark weights
     errors2d *= lm_weights
 
     # We lightly penalize positions too close to landmarks

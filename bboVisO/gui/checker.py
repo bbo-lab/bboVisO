@@ -20,6 +20,7 @@ from calibcamlib import Camerasystem
 from bboVisO import helper
 
 from bbo import label_lib
+import paho.mqtt.client as mqtt
 
 matplotlib.use('Qt5Agg')
 
@@ -27,6 +28,7 @@ matplotlib.use('Qt5Agg')
 class bboVisOchecker(QMainWindow):
     def __init__(self, data, opts):
         super().__init__()
+        i = 0
 
         self.components = {
             'main': {},
@@ -45,12 +47,13 @@ class bboVisOchecker(QMainWindow):
 
         self.data = data
         self.opts = opts
-
-        calibration = data["calibration"]
-        self.calibs = np.load(calibration, allow_pickle=True)[()]["calibs"]
-        self.camera_system = Camerasystem.from_calibs(self.calibs)
+        self.mqtt_client = None
 
         path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
+        print(data["calibration"])
+        calibration = path / f"multicam_calibration_viso.yml"
+        self.calibs = Camerasystem.load_dict(calibration)["calibs"]
+        self.camera_system = Camerasystem.from_calibs(self.calibs)
 
         viso_maxerrors_pd = pd.read_csv(path / f"maxerror.csv", sep="\t")
         viso_maxerrors_pd.sort_values('t_us', ascending=True, inplace=True)
@@ -60,28 +63,30 @@ class bboVisOchecker(QMainWindow):
         viso_errors_pd.sort_values('t_us', ascending=True, inplace=True)
         self.viso_errors = np.array(viso_errors_pd[viso_errors_pd.columns[1:]]).T
 
+        print(path / f"cam_positions.csv")
         viso_positions_pd = pd.read_csv(path / f"cam_positions.csv", sep="\t")
+        print(viso_positions_pd)
         self.viso_positions = np.array([
-            viso_positions_pd["x0"],
-            viso_positions_pd["y0"],
-            viso_positions_pd["z0"],
+            viso_positions_pd["x"],
+            viso_positions_pd["y"],
+            viso_positions_pd["z"],
         ]).T
 
         viso_orientations_pd = pd.read_csv(path / f"cam_orientations.csv", sep="\t")
         viso_orientations_q = np.array([
-            viso_orientations_pd["x0"],
-            viso_orientations_pd["y0"],
-            viso_orientations_pd["z0"],
-            viso_orientations_pd["w0"],
+            viso_orientations_pd["x"],
+            viso_orientations_pd["y"],
+            viso_orientations_pd["z"],
+            viso_orientations_pd["w"],
         ]).T
         self.viso_orientations = R.from_quat(viso_orientations_q)
 
         viso_landmarks_pd = pd.read_csv(path / f"landmarks.csv", sep="\t")
         self.landmark_labels = list(viso_landmarks_pd["landmark"])
         self.landmark_coords3d = np.array([
-            viso_landmarks_pd["x0"],
-            viso_landmarks_pd["y0"],
-            viso_landmarks_pd["z0"],
+            viso_landmarks_pd["x"],
+            viso_landmarks_pd["y"],
+            viso_landmarks_pd["z"],
         ]).T
 
         self.viso_times = np.array(viso_positions_pd["t_us"])
@@ -105,17 +110,19 @@ class bboVisOchecker(QMainWindow):
         # detected_labels = [d for d in detected_labels if d in self.landmark_labels]
 
         if "cam_time_bases" in data:
-            self.cam_time_bases = [ct[self.landmark_frames] for ct in data["cam_time_bases"]]
+            cam_time_bases = data["cam_time_bases"]
         else:
-            self.cam_time_bases = helper.get_cam_time_bases(self.landmark_frames, data["cam_fps"], data["cam_offsets"],
+            cam_time_bases = helper.get_cam_time_bases(self.landmark_frames[-1]+1, data["cam_fps"], data["cam_offsets"],
                                                             self.opts)
 
+        self.detected_times = [t[self.landmark_frames] for t in cam_time_bases]
+
         self.landmark_imcoords, self.times = label_lib.to_numpy(label_data, self.landmark_frames, self.landmark_labels,
-                                                                time_bases=self.cam_time_bases,
+                                                                time_bases=self.detected_times,
                                                                 label_identity=landmarks_identity)
 
         self.landmark_imcoords = bboVisO.interpolation.interpolate_imcoords(self.landmark_imcoords, self.times, self.calibs,
-                                                                            self.cam_time_bases)[0]
+                                                                            self.detected_times)[0]
         # self.landmark_imcoords[1] = np.nan
 
         self.time_idx = 0
@@ -131,17 +138,36 @@ class bboVisOchecker(QMainWindow):
         self.set_time_idx(0)
         self.set_cam_idx(0)
 
-    def set_time_idx(self, idx, update_frame=True, switch_cam=False):
+        self.mqtt_connect()
+
+    def mqtt_connect(self):
+        try:
+            self.mqtt_client = mqtt.Client()
+            self.mqtt_client.on_message = self.mqtt_on_message
+            self.mqtt_client.connect("127.0.0.1", 1883, 60)
+            self.mqtt_client.subscribe("bbo/sync/fr_idx")
+            self.mqtt_client.subscribe("bbo/sync/t")
+            self.mqtt_client.loop_start()
+        except ConnectionRefusedError:
+            print("ERROR: No connection to MQTT server.")
+            self.mqtt_client = None
+
+    def set_time_idx(self, idx, update_frame=True, switch_cam=False, mqtt_publish=True):
+        if self.time_idx == idx:
+            if update_frame:
+                self.update_frame()
+            return
+
         self.time_idx = idx
         time = self.times[self.time_idx]
 
-        cam_mask = np.array([np.isin(time, ctb) for ctb in self.cam_time_bases])
+        cam_mask = np.array([np.isin(time, ctb) for ctb in self.detected_times])
         avail_cam_idxs = np.where(cam_mask)[0]
         if switch_cam and self.cam_idx not in avail_cam_idxs:
-            self.set_cam_idx(avail_cam_idxs[0], update_time=False)
+            self.set_cam_idx(avail_cam_idxs[0], update_time=False, mqtt_publish=mqtt_publish)
 
         # Set camera frame for time point
-        cam_idxs = np.where(self.cam_time_bases[self.cam_idx] == self.times[self.time_idx])[0]
+        cam_idxs = np.where(self.detected_times[self.cam_idx] == self.times[self.time_idx])[0]
         if len(cam_idxs) > 0:
             self.cam_frame_idx = cam_idxs[0]
             landmark_frame = self.landmark_frames[self.cam_frame_idx]
@@ -162,19 +188,42 @@ class bboVisOchecker(QMainWindow):
         self.components["controls"]["edit_t"].setText(str(time))
         self.components["controls"]["edit_t"].blockSignals(False)
 
+        if mqtt_publish:
+            self.mqtt_publish()
+
         if update_frame:
             self.update_frame()
 
-    def set_cam_frame_idx(self, idx, update_frame=True):
-        time = self.cam_time_bases[self.cam_idx][np.min((len(self.cam_time_bases[self.cam_idx]) - 1, idx))]
-        time_idx = np.argmin(np.abs(self.times - time))
-        self.set_time_idx(time_idx, update_frame)
+    def mqtt_publish(self):
+        if self.mqtt_client is not None:
+            try:
+                self.mqtt_client.publish("bbo/sync/t", payload=str(self.times[self.time_idx]))
+                self.mqtt_client.publish("bbo/sync/fr_idx", payload=str(self.landmark_frames[self.cam_frame_idx]))
+            except ConnectionRefusedError:
+                print("ERROR: No connection to MQTT server.")
+                self.mqtt_client = None
 
-    def set_time(self, time, update_frame=True):
-        time_idx = np.argmin(np.abs(self.times - time))
-        self.set_time_idx(time_idx, update_frame)
+    def set_cam_frame(self, fr_idx, update_frame=True, mqtt_publish=True):
+        cam_time_idx = np.where(self.landmark_frames == fr_idx)[0]
+        if len(cam_time_idx) == 0:
+            print("Frame not in viso")
+            cam_time_idx = self.cam_frame_idx
+        else:
+            cam_time_idx = cam_time_idx[0]
+        self.set_cam_frame_idx(cam_time_idx, update_frame=True, mqtt_publish=mqtt_publish)
 
-    def set_cam_idx(self, idx, update_time=True):
+    def set_cam_frame_idx(self, idx, update_frame=True, mqtt_publish=True):
+        cam_time_idx = np.min((len(self.detected_times[self.cam_idx]) - 1, idx))
+
+
+        time = self.detected_times[self.cam_idx][cam_time_idx]
+        self.set_time(time, update_frame=update_frame, mqtt_publish=mqtt_publish)
+
+    def set_time(self, time, update_frame=True, mqtt_publish=True):
+        time_idx = np.argmin(np.abs(self.times - time))
+        self.set_time_idx(time_idx, update_frame, mqtt_publish=mqtt_publish)
+
+    def set_cam_idx(self, idx, update_time=True, mqtt_publish=True):
         self.cam_idx = idx
         #
         # time = self.times[self.time_idx]
@@ -193,11 +242,11 @@ class bboVisOchecker(QMainWindow):
         # self.components["controls"]["dropdown_cams"].blockSignals(False)
         #
         if update_time:
-            self.set_time_idx(self.time_idx)
+            self.set_time_idx(self.time_idx, mqtt_publish=mqtt_publish)
 
     def open_readers(self):
         print("Opening readers ... ", end="")
-        self.readers = [get_reader(v.as_posix(), backend="iio") for v in self.data["videos"]]
+        self.readers = [get_reader(Path(v).as_posix(), backend="iio") for v in self.data["videos"]]
         self.frame_dimensions = [r.get_data(0).shape for r in self.readers]
         print("done")
 
@@ -243,7 +292,7 @@ class bboVisOchecker(QMainWindow):
         cam_layout = QHBoxLayout()
         # Dropdown
         self.components["controls"]["dropdown_cams"] = QComboBox()
-        self.components["controls"]["dropdown_cams"].addItems([str(i) for i, _ in enumerate(self.cam_time_bases)])
+        self.components["controls"]["dropdown_cams"].addItems([str(i) for i, _ in enumerate(self.detected_times)])
         cam_layout.addWidget(self.components["controls"]["dropdown_cams"])
 
         self.components["controls"]["button_fr_prev"] = QPushButton("<")
@@ -312,28 +361,32 @@ class bboVisOchecker(QMainWindow):
         self.set_time_idx(self.components["controls"]["slider_t"].value())  # Divide by 10 to get actual values
 
     def on_edit_t_change(self):
-        value = float(self.components["controls"]["edit_t"].text())
-        self.set_time_idx(np.argmin(np.abs(self.times - value)))
+        time = float(self.components["controls"]["edit_t"].text())
+        self.set_time(time, update_frame=True)
 
     def on_edit_fr_change(self):
         idx = int(self.components["controls"]["edit_fr"].text())
-
-        cam_time_idx = np.where(self.landmark_frames == idx)[0]
-        if len(cam_time_idx) == 0:
-            print("Frame not in viso")
-            self.set_cam_frame_idx(self.cam_frame_idx)
-            return
-
-        time = self.cam_time_bases[self.cam_idx][cam_time_idx]
-
-        self.set_time(time)
+        self.set_cam_frame(idx, update_frame=True)
 
     def on_dropdown_change(self, index):
         selected_option = self.components["controls"]["dropdown_cams"].itemText(index)
         self.set_cam_idx(int(selected_option))
 
+    def mqtt_on_message(self, client, userdata, message):
+        print(f"Received message '{message.payload.decode()}' on topic '{message.topic}'")
+        try:
+            match message.topic:
+                case "bbo/sync/t":
+                    time = float(message.payload.decode())
+                    # self.set_time(time, update_frame=True, mqtt_publish=False)
+                case "bbo/sync/fr_idx":
+                    fr_idx = int(message.payload.decode())
+                    # self.set_cam_frame(fr_idx, update_frame=True, mqtt_publish=False)
+        except Exception as e:
+            print(e)
+
     def update_frame(self):
-        cam_mask = np.array([np.isin(self.times[self.time_idx], ctb) for ctb in self.cam_time_bases])
+        cam_mask = np.array([np.isin(self.times[self.time_idx], ctb) for ctb in self.detected_times])
         avail_cam_idxs = np.where(cam_mask)[0]
         if self.cam_idx in avail_cam_idxs:
             img = self.readers[self.cam_idx].get_data(self.landmark_frames[self.cam_frame_idx])
@@ -395,8 +448,8 @@ class bboVisOchecker(QMainWindow):
 
             self.camera_system = Camerasystem.from_calibs(self.calibs)
             imcoords_proj = self.camera_system.project(rel_points)[self.cam_idx]
-            print("Cameralib: ", imcoords_proj)
-            print("Labels: ", imcoords)
+            # print("Cameralib: ", imcoords_proj)
+            # print("Labels: ", imcoords)
 
             imcoords_proj[np.isnan(imcoords)] = np.nan
 

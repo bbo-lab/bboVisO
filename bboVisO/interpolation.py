@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 from calibcamlib.camerasystem import Camerasystem
 from scipy.interpolate import interp1d
@@ -6,6 +8,7 @@ from scipy.spatial.transform import Rotation as R, Slerp
 from bboVisO.helper import generate_immediate_neighbor_mask, landmark_vecs_from_imcoords, landmark_imcoords_from_vecs
 from bboVisO.methods.repro.optfuncs import objfun_runner as objfun_runner_repro
 
+from bbo.geometry import RigidTransform
 
 def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, optimize,
                            landmark_imcoords=None,
@@ -18,11 +21,12 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
     abserrors = np.sqrt(np.nansum(objfun_error ** 2, axis=-1))
     abserrors[abserrors == 0] = np.nan
 
-    frame_errors_max = np.nanmax(abserrors, axis=(0, -1))
-    frame_errors_median = np.nanmedian(abserrors, axis=(0, -1))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        frame_errors_max = np.nanmax(abserrors, axis=(0, -1))
+        frame_errors_median = np.nanmedian(abserrors, axis=(0, -1))
     low_error_mask = frame_errors_max < opts['interpolate_high_error']
-    low_error_mask[(0, -1),] = True  # We never want extrapolation
-    #
+
     # if np.sum(~low_error_mask)/len(low_error_mask)>0.7:
     #     print("Too many high max errors, reverting to median error.")
     #     frame_errors = np.nanmedian(abserrors, axis=-1)
@@ -38,10 +42,12 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
     objfun_error_interp = objfun_runner_repro(
         landmarks, positions_interp, oris_flu_interp, landmark_imcoords, calibs, opts
     )
-    abserrors_interp = np.sqrt(np.nansum(objfun_error_interp ** 2, axis=-1))
-    abserrors_interp[abserrors_interp == 0] = np.nan
-    frame_errors_max_interp = np.nanmax(abserrors_interp, axis=(0, -1))
-    frame_errors_median_interp = np.nanmedian(abserrors_interp, axis=(0, -1))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        abserrors_interp = np.sqrt(np.nansum(objfun_error_interp ** 2, axis=-1))
+        abserrors_interp[abserrors_interp == 0] = np.nan
+        frame_errors_max_interp = np.nanmax(abserrors_interp, axis=(0, -1))
+        frame_errors_median_interp = np.nanmedian(abserrors_interp, axis=(0, -1))
     low_error_mask_interp = frame_errors_max_interp < opts['interpolate_high_error']
 
     # We never want to make the max or median error worse
@@ -83,69 +89,106 @@ def interpolate_mask(time, pos, ori, mask):
     if np.sum(mask) / len(mask) < 0.25 or np.sum(mask) == 1:
         return pos, ori
 
-    pos_interp_f = [interp1d(time[mask], p, fill_value='extrapolate') for p in pos[mask].T]
-    pos_interp = np.array([i_f(time) for i_f in pos_interp_f]).T
+    trafo = RigidTransform(ori[mask], pos[mask])
+    trafo_interp = trafo.interpolate(time[mask], fill_boundary="constant")(time)
 
-    mask[0] = True  # Slerp cannot extrapolate
-    mask[-1] = True
-    ori_spline = Slerp(time[mask], ori[mask])
-    # ori_q = ori.as_quat()
-    # ori_q = ori_q * np.sign(ori_q[:, (0,)])
-    # ori_interp_f = [interp1d(time[mask], o, fill_value='extrapolate') for o in ori_q[mask].T]
-    # ori_interp = np.array([i_f(time) for i_f in ori_interp_f]).T
-
-    return pos_interp, ori_spline(time)
+    return trafo_interp.get_translation(), trafo_interp.get_rotation()
 
 
 def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
     # Interpolates time points in array_2d that are not part of sub_time_bases
     vecs_cams = landmark_vecs_from_imcoords(imcoords, calibs)
 
-    pretimes = time_base[1:] - time_base[:-1]
+    pretimes = np.diff(time_base)
 
+    sub_time_base_members = []
     for i_c, vecs_cam in enumerate(vecs_cams):
         # create mask of frames that belong to one of the sub_time_bases that make up the array_time_base
         if sub_time_bases is None:
-            sub_time_base_members = np.ones_like(time_base, dtype=bool)
+            sub_time_base_members.append(np.ones_like(time_base, dtype=bool))
         else:
-            sub_time_base_members = np.isin(time_base, sub_time_bases[i_c])
+            sub_time_base_members.append(np.isin(time_base, sub_time_bases[i_c]))
 
-        vecs_cam_interp = (vecs_cam[:-2] * pretimes[1:][..., np.newaxis, np.newaxis] +
-                           vecs_cam[2:] * pretimes[:-1][..., np.newaxis, np.newaxis])
-        vecs_cam_interp /= np.linalg.norm(vecs_cam_interp, axis=-1, keepdims=True)
+        t = (pretimes[:-1] / (pretimes[:-1] + pretimes[1:]))[..., np.newaxis]
+        th = np.arccos(np.clip(np.sum((vecs_cam[:-2] * vecs_cam[2:]), axis=-1), -1, 1))
+        vecs_cam_interp = (
+                vecs_cam[:-2] * (np.sin((1 - t) * th) / np.sin(th))[..., np.newaxis] +
+                vecs_cam[2:] * (np.sin(t * th) / np.sin(th))[..., np.newaxis]
+        )  # Slerp
 
         # This changes cam_vecs IN PLACE!, replacing only the values previously nan
         vecs_cam_ireg = vecs_cam[1:-1]
-        mask = np.isnan(vecs_cam_ireg) & (~sub_time_base_members[1:-1, np.newaxis, np.newaxis])
+        mask = np.isnan(vecs_cam_ireg) & (~sub_time_base_members[-1][1:-1, np.newaxis, np.newaxis])
         vecs_cam_ireg[mask] = vecs_cam_interp[mask]
 
     imcoords_interp = landmark_imcoords_from_vecs(vecs_cams, calibs)
+    interpolation_mask = np.zeros_like(imcoords, dtype=bool)
+    interpolation_mask[np.array(sub_time_base_members)] = True
 
-    return imcoords_interp, vecs_cams, time_base
+    return imcoords_interp, vecs_cams, time_base, interpolation_mask
 
 
-def interpolate_imcoords_rebase(array_2d, array_time_base, calibs, dt, time_base=None):
-    cs = Camerasystem.from_calibs(calibs)
-    array_3d = cs.get_camera_lines(array_2d)[0]
+def interpolate_imcoords_rebase(imcoords_or_vecs_cams, im_array_time_base, calibs, interp_times, interp_dt=None,
+                                omit_reprojection=False):
+    # This interpolates within each cam, ensuring that all interpolated vectors lie within the valid FOV of each cam
+    if calibs is not None:
+        vecs_cams = landmark_vecs_from_imcoords(imcoords_or_vecs_cams, calibs)
+    else:
+        vecs_cams = imcoords_or_vecs_cams
+    vecs_cams_interp = np.full(vecs_cams.shape[0:1] + (len(interp_times),) + vecs_cams.shape[2:3] + (3,), np.nan)
 
-    if time_base is None:
-        time_base = array_time_base
+    for i_c, vecs_cam in enumerate(vecs_cams):
+        nnanmask = np.any(~np.isnan(vecs_cam[..., 0]), axis=1) # Over x coordinate of all labels, frame dim remains
+        vecs_cam = vecs_cam[nnanmask]
+        time_base_cam = im_array_time_base[nnanmask]
 
-    array_3d_interp = np.full((array_2d.shape[0], len(time_base), array_2d.shape[2], 3), np.nan)
-    for i_c, array_3d_cam in enumerate(array_3d):
-        array_3d_cam = array_3d_cam.transpose((1, 0, 2))
-        for i_m, array_3d_cam_marker in enumerate(array_3d_cam):
-            nan_mask = np.any(np.isnan(array_3d_cam_marker), axis=-1)
-            if np.sum(~nan_mask) < 2:
-                continue
-            no_nan_array_time_base = array_time_base[~nan_mask]
-            array_3d_cam_marker_if = [interp1d(array_time_base[~nan_mask], a, fill_value="extrapolate") for a in
-                                      array_3d_cam_marker[~nan_mask].T]
-            array_3d_cam_marker_i = np.array([i_f(time_base) for i_f in array_3d_cam_marker_if]).T
-            array_3d_cam_marker_i[~generate_immediate_neighbor_mask(time_base, no_nan_array_time_base, dt)] = np.nan
-            array_3d_interp[i_c, :, i_m] = array_3d_cam_marker_i
+        base_dt = np.diff(time_base_cam)
 
-    array_2d_interp = cs.project_dir(array_3d_interp)
-    array_2d_out = np.diagonal(array_2d_interp, axis1=0, axis2=1).transpose((3, 0, 1, 2))
+        if interp_dt is None:
+            interp_dt = np.nanmin(base_dt)
 
-    return array_2d_out, array_3d_interp, time_base
+        post_idxs = np.digitize(interp_times, time_base_cam)
+        pre_idxs = post_idxs - 1
+        interp_times_mask = (pre_idxs >= 0) & (post_idxs < len(time_base_cam))  # Rest ist outside of bins
+
+        pre_idxs = pre_idxs[interp_times_mask]
+        post_idxs = post_idxs[interp_times_mask]
+
+        pretimes = interp_times[interp_times_mask] - time_base_cam[pre_idxs]
+        posttimes = base_dt[pre_idxs] - pretimes
+
+        t = (pretimes / (pretimes + posttimes))[..., np.newaxis]
+        th = np.arccos(np.clip(np.sum((vecs_cam[pre_idxs] * vecs_cam[post_idxs]), axis=-1), -1, 1))
+        th_d = th.copy()
+        th_d[th==0] = np.nan
+
+        vecs_cam_pre = vecs_cam[pre_idxs]
+        vecs_cam_interp = (
+                vecs_cam_pre * (np.sin((1 - t) * th_d) / np.sin(th_d))[..., np.newaxis] +
+                vecs_cam[post_idxs] * (np.sin(t * th_d) / np.sin(th_d))[..., np.newaxis]
+        )  # Slerp
+
+        # Slerp divides by 0 if angle betweeh pre and post is 0, fix here
+        vecs_cam_interp[th==0] = vecs_cam_pre[th==0]
+
+        vecs_cams_interp[i_c, interp_times_mask] = vecs_cam_interp
+
+        # import matplotlib.pyplot as plt
+        # fig, ax = plt.subplots(1,1)
+        # for i_d in range(1):
+        #     line = ax.plot(interp_times, vecs_cams_interp[i_c,:,:, i_d])
+        #     ax.plot(time_base_cam, vecs_cam[:, :, i_d], '+', color=line[0].get_color())
+        # plt.xlim((2e7, 2.02e7))
+        # plt.show()
+
+        # Remove interpolations with too large distances to adjacent frames
+        interp_times_idxs = np.where(interp_times_mask)[0]
+        interp_remove_mask = (pretimes > interp_dt) | (posttimes > interp_dt)
+        vecs_cams_interp[i_c, interp_times_idxs[interp_remove_mask]] = np.nan
+
+    if not omit_reprojection and calibs is not None:
+        imcoords_interp = landmark_imcoords_from_vecs(vecs_cams_interp, calibs)
+    else:
+        imcoords_interp = np.full(vecs_cams_interp.shape[0:3] + (2,), np.nan)
+
+    return imcoords_interp, vecs_cams_interp, interp_times

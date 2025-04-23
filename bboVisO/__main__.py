@@ -17,11 +17,11 @@ import bboVisO.viso as viso
 from bboVisO.helper import get_cam_time_bases
 from bboVisO.output import save_to_text
 from bboVisO.visualisation import plot_frames
-from calibcam import yaml_helper
-
+from calibcamlib import yaml_helper
 
 # single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!
-# jax.config.update("jax_enable_x64", True)
+import jax
+jax.config.update("jax_enable_x64", True)
 
 
 def main():
@@ -99,22 +99,22 @@ def main():
 
             # Set time range to process
             for i in range(2):
-                if not args.time_range[i] == -sys.maxsize or args.time_range[i] == sys.maxsize:
+                if args.time_range[i] != -sys.maxsize and args.time_range[i] != sys.maxsize:
                     opts["time_range"][i] = args.time_range[i]
                 elif "time_range" in data:
                     opts["time_range"][i] = data["time_range"][i]
 
             # Load labels
-            landmark_labels = label_lib.load(label_data)
+            landmark_labels = label_lib.load(label_data, v0_format=True)
             landmark_frames = label_lib.get_labeled_frame_idxs(landmark_labels)
 
             # Assign times to landmark frames ...
             if "cam_time_bases" in data:
                 # ... either from directly supplied frame times
-                cam_time_bases = [ct[landmark_frames] for ct in data["cam_time_bases"]]
+                cam_time_bases = data["cam_time_bases"]
             else:
                 # ... or from FPS
-                cam_time_bases = get_cam_time_bases(landmark_frames, data["cam_fps"], data["cam_offsets"], opts)
+                cam_time_bases = get_cam_time_bases(landmark_frames[-1]+1, data["cam_fps"], data["cam_offsets"], opts)
 
             # Offset time bases of cameras
             cam_time_bases = [(ct + ao).astype(opts["time_dtype"]) for ct, ao in

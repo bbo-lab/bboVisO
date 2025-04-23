@@ -1,3 +1,5 @@
+import importlib
+
 import numpy as np
 from calibcamlib import Camerasystem
 from scipy.spatial.transform import Rotation as R
@@ -5,7 +7,7 @@ from scipy.spatial.transform import Rotation as R
 from bbo.geometry import RigidTransform
 
 
-def get_cam_time_bases(frame_idxs, cam_fps, cam_offsets, opts):
+def get_cam_time_bases(max_frame, cam_fps, cam_offsets, opts):
     offsets = (np.array(cam_offsets)).astype(np.uint64)
 
     cam_time_bases = []
@@ -16,7 +18,7 @@ def get_cam_time_bases(frame_idxs, cam_fps, cam_offsets, opts):
         if offset_fr - np.round(offset_fr) < 0.01:
             offset_fr = np.round(offset_fr)
 
-        cam_time_bases.append(((frame_idxs.astype(float) + offset_fr) / fps).astype(np.uint64))
+        cam_time_bases.append(((np.arange(max_frame).astype(float) + offset_fr) / fps).astype(np.uint64))
 
     # Adjust time that are just off by 1us from float rounding, to not create an additional measurement
     for i_cam in range(1, len(cam_time_bases)):
@@ -60,6 +62,7 @@ def landmarks_to_array(landmark_coordinates, detected_labels):
             landmarks_far.append(False)
             landmarks_use.append(False)
             landmarks_identity.append(landmark_coordinates["landmarks"][ln]["identity"])
+            landmarks_weights.append(landmark_coordinates["landmarks"][ln].get("weight", 1))
             continue
 
         landmarks_identity.append(None)
@@ -90,12 +93,18 @@ def generate_immediate_neighbor_mask(ts, neighbor_ts, max_dist):
         (ts <= neighbor_ts + max_dist) & (ts >= neighbor_ts), axis=0)
 
 
-def realign_by_distant_features(landmark_coords3d, imcoords, times, positions, orientations, calibs):
+def realign_by_distant_features(landmark_coords3d, imcoords_or_lm_vec, times, positions, orientations, calibs):
     orientations_filtered = orientations.as_quat()
-    landmark_vecs = landmark_vecs_from_imcoords(imcoords, calibs)
+
+    if calibs is None:
+        landmark_vecs = imcoords_or_lm_vec
+    else:
+        landmark_vecs = landmark_vecs_from_imcoords(imcoords_or_lm_vec, calibs)
+    landmark_vecs = np.nanmean(landmark_vecs, axis=0)
+
     no_common = 0
     for i_t, t in enumerate(times):
-        frame_landmark_vectors = landmark_coords3d - positions[i_t]
+        frame_landmark_vectors = landmark_coords3d - positions[np.newaxis, i_t]
         landmark_dists = np.linalg.norm(frame_landmark_vectors, axis=-1, keepdims=True)
         frame_landmark_vectors /= landmark_dists
         landmark_vec_mask = ~np.any(np.isnan(frame_landmark_vectors), axis=-1)
@@ -107,8 +116,8 @@ def realign_by_distant_features(landmark_coords3d, imcoords, times, positions, o
             continue
 
         landmark_dists[~common_mask] = np.nan
-        furthest_mask = landmark_dists[:, 0] >= np.sort(landmark_dists[common_mask, 0])[
-            np.min((int(np.sum(common_mask) / 2), np.sum(common_mask) - 2))]
+        # furthest_mask = landmark_dists[:, 0] >= np.sort(landmark_dists[common_mask, 0])[
+        #     np.min((int(np.sum(common_mask) / 2), np.sum(common_mask) - 2))]
 
         align = R.align_vectors(
             frame_landmark_vectors[common_mask], landmark_vecs[i_t][common_mask]
@@ -146,13 +155,29 @@ def update_calibs_extrinsics(calibs, cam_rotvecs, cam_ts):
     return calibs
 
 
-def get_var_edges(m, k, k_p, n):
+def get_var_edges(m, k, n):
     field_sizes = np.array([0,
                             n * 3,  # landmarks
-                            k_p * 3,  # positions
+                            k * 3,  # positions
                             k * 3,  # orientations
                             m * 3,  # cam extrinsic rotations
                             m * 3,  # cam extrinsic positions
                             ])
     edges = np.cumsum(field_sizes)
     return edges
+
+
+def load_func(func_name, module_name=None):
+    if module_name is not None:
+        try:
+            module = importlib.import_module(module_name)  # Import the module dynamically
+            func = getattr(module, func_name, None)  # Get function from module
+        except ModuleNotFoundError:
+            raise ImportError(f"Module '{module_name}' not found.")
+        except AttributeError:
+            raise ImportError(f"Function '{func_name}' not found in module '{module_name}'.")
+    else:
+        func = globals().get(func_name) or locals().get(func_name)
+    if not callable(func):
+        raise ValueError(f"'{func_name}' is not callable in '{module_name}'.")
+    return func

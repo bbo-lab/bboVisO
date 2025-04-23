@@ -9,7 +9,7 @@ README = (HERE / "README.md").read_text()
 # This call to setup() does all the work
 setup(
     name="bbo-viso",
-    version="1.6.0",
+    version="1.7.0",
     description="Simple visual odometry for omnidirectional cameras",
     long_description=README,
     long_description_content_type="text/markdown",
@@ -23,5 +23,5 @@ setup(
     ],
     packages=['bboVisO'],
     include_package_data=True,
-    install_requires=['numpy', 'jax', 'bbo-calibcam', 'bbo-calibcamlib', 'scipy', 'bbo-bbo'],
+    install_requires=['numpy', 'jax', 'bbo-calibcam', 'bbo-calibcamlib', 'scipy', 'bbo-bbo', 'tqdm'],
 )

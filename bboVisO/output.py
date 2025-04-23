@@ -52,7 +52,7 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
         filter_and_save(csv_file, df, opts)
 
     # Errors
-    absolute_error = np.sqrt(np.sum(error_repro ** 2, axis=(0,-1)))
+    absolute_error = np.sqrt(np.nansum(error_repro ** 2, axis=(0,-1)))
     # Error
     csv_file = path_base / "error.csv"
     data = absolute_error.T

@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 
 import bboVisO.viso as viso
@@ -23,12 +25,12 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     detected_frames = label_lib.get_labeled_frame_idxs(landmark_labels, label_set=labels)
     print(len(detected_frames))
 
+    detected_times = [t[detected_frames] for t in time_bases]
+
     # Marked labels
     detected_labels = sorted(label_lib.get_labels(landmark_labels))
+    # Reduce labels to those that are also present as landmarks
     detected_labels = [d for d in detected_labels if d in labels]
-
-    # All marked labels must correspond to a landmark, coordinates may be empty or nan
-    assert set(detected_labels).issubset(labels), "Some detected labels are unknown"
 
     # Convert landmark dictionary to array and extract metadata to masks
     landmarks_all, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_use, landmarks_weights = (
@@ -43,7 +45,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     # n_times is sort(unique()) of all time bases
     # If frame times between cameras do not align, the labels of respective other cameras will be nan
     landmark_imcoords, time_base = label_lib.to_numpy(landmark_labels, detected_frames, labels,
-                                                      time_bases=time_bases,
+                                                      time_bases=detected_times,
                                                       label_identity=landmarks_identity)
 
     # Remove all timepoints in which all cameras are nan
@@ -53,7 +55,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     time_base = time_base[data_idxs[0]:data_idxs[-1] + 1]
 
     # Cut down to desired time range
-    time_base_mask = np.logical_and(opts["time_range"][0] <= time_base, time_base <= opts["time_range"][1])
+    time_base_mask = (opts["time_range"][0] <= time_base) & (time_base <= opts["time_range"][1])
     landmark_imcoords = landmark_imcoords[:, time_base_mask]
     time_base = time_base[time_base_mask]
 
@@ -63,15 +65,14 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     #                                                                           calibs,
     #                                                                           1.01*np.median(np.diff(time_bases)),
     #                                                                           time_base, time_bases)
-    landmark_imcoords, landmark_vecs, time_base = interpolate_imcoords(landmark_imcoords_orig, time_base, calibs,
-                                                                       time_bases)
-
-    # landmark_imcoords[0] = np.nan
+    landmark_imcoords, landmark_vecs, time_base, imcoords_interp_mask = (
+        interpolate_imcoords(landmark_imcoords_orig, time_base, calibs, sub_time_bases=detected_times))
 
     # Cut down to points with sufficient landmarks per opts["min_labels"]. Less than 4 is ill-defined
     sufficient_mask = np.sum(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2)) >= opts["min_labels"]
     time_base = time_base[sufficient_mask]
     landmark_imcoords = landmark_imcoords[:, sufficient_mask]
+    imcoords_interp_mask = imcoords_interp_mask[:, sufficient_mask]
     landmark_vecs = landmark_vecs[:, sufficient_mask]
 
     # ====== Section for in-place testing ======
@@ -85,7 +86,6 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     landmarks_opt = landmarks_all.copy()
     # ====== /Section for in-place testing ======
 
-    # Optimize p&o, then p&o&l for all used landmarks
     landmarks_mask = landmarks_use
     landmarks_opt_mask, positions_opt, oris_flu_opt, calibs = \
         viso.infer_position_attitude(time_base, calibs, opts,
@@ -96,7 +96,8 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                      oris_flu_init=oris_flu_opt,
                                      landmarks_optimize=landmarks_optimize[landmarks_mask],
                                      landmarks_far=landmarks_far[landmarks_mask],
-                                     landmarks_weights=landmarks_weights,
+                                     landmarks_weights=landmarks_weights[landmarks_mask],
+                                     imcoords_interp_mask=imcoords_interp_mask[:, :, landmarks_mask],
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
 
@@ -108,10 +109,12 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
 
     abserr = np.sqrt(np.sum(error_repro ** 2, axis=-1))
     error_n = min(len(time_base), 4)
-    print(
-        f"Highest mean error time: {time_base[np.argpartition(np.nanmean(abserr, axis=-1), -error_n)[-error_n:]]}")
-    print(
-        f"Highest max error time: {time_base[np.argpartition(np.nanmax(abserr, axis=-1), -error_n)[-error_n:]]}")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        print(f"Highest mean error time: "
+              f"{time_base[np.argpartition(np.nanmean(abserr, axis=-1), -error_n)[-error_n:]]}")
+        print(f"Highest max error time: "
+              f"{time_base[np.argpartition(np.nanmax(abserr, axis=-1), -error_n)[-error_n:]]}")
 
     landmarks, positions, oris_flu = (landmarks_opt, positions_opt, oris_flu_opt)
 

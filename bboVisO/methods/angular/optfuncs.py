@@ -6,7 +6,7 @@ from .optfuncs_ag import objfun
 from ..common import (objfun_jacobian_wrapper_sparse as objfun_jacobian_wrapper_sparse_common,
                       objfun_jacobian_wrapper_dense as objfun_jacobian_wrapper_dense_common,
                       make_jacobian_sparsity_mask as make_jacobian_sparsity_mask_common)
-from ...unravel import unravel_vars as unravel_vars_base, unpack_calibs
+from ...ravel import unravel_vars as unravel_vars_base, unpack_calibs
 
 
 def objfun_runner(landmarks, positions, oris_flu, landmark_vecs, calibs, opts) -> np.ndarray:
@@ -20,7 +20,6 @@ def objfun_runner(landmarks, positions, oris_flu, landmark_vecs, calibs, opts) -
 def objfun_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
     obfun_inputs = unravel_vars(free_vars, args)
     errors = np.array(jit(objfun)(*obfun_inputs))
-
     if no_ravel:
         return errors
     else:
@@ -42,7 +41,8 @@ def objfun_jacobian_wrapper(free_vars, args) -> np.ndarray:
     jacs = get_jacobians(args)
 
     jac_sparse = objfun_jacobian_wrapper_sparse_common(free_vars, args, jacs, unravel_vars, sd)
-
+    jac_sparse.data[np.isinf(jac_sparse.data)] = 1e9
+    # print(jac_sparse.min(), jac_sparse.max())
     return jac_sparse
 
 
@@ -52,14 +52,20 @@ def make_jacobian_sparsity_mask(m, k, n, mask_free_input):
 
 
 def unravel_vars(free_vars, args):
-    landmarks, positions, oris_flu, cam_rotvecs, cam_ts = unravel_vars_base(free_vars, args)
+    landmarks, positions, oris_flu, cam_rotvecs, cam_ts = unravel_vars_base(free_vars, args["ravel_args"])
 
     landmark_vecs = args["landmark_vecs"]
-    lm_close_pen_weight = args["lm_close_pen_weight"]
     lm_weights = args["landmarks_weights"]
 
-    return (landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
-            landmark_vecs, lm_weights, lm_close_pen_weight)
+    weight_mask = args["weight_mask"]
+    weight = args["weight"]
+    mask_weight = np.ones_like(weight_mask)
+    mask_weight[weight_mask] = weight
+
+    lm_close_pen_weight = args["lm_close_pen_weight"]
+
+    return (landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_vecs, lm_weights, mask_weight,
+            lm_close_pen_weight)
 
 
 jacobians_angular = None
