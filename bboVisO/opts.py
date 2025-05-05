@@ -40,10 +40,15 @@ def get_opts():
         }
     }
 
+    opts = finalize_opts(opts)
+
+    return opts
+
+
+def finalize_opts(opts):
     for iteropts in opts['iterations']:
         if iteropts['ravel'] is None:
             iteropts['ravel'] = opts['ravel']
-
     return opts
 
 
