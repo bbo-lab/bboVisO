@@ -93,7 +93,7 @@ def generate_immediate_neighbor_mask(ts, neighbor_ts, max_dist):
         (ts <= neighbor_ts + max_dist) & (ts >= neighbor_ts), axis=0)
 
 
-def realign_by_distant_features(landmark_coords3d, imcoords_or_lm_vec, times, positions, orientations, calibs):
+def realign_by_distant_features(landmark_coords3d, imcoords_or_lm_vec, times, positions, orientations, calibs, min_dist=None, percentile=None):
     orientations_filtered = orientations.as_quat()
 
     if calibs is None:
@@ -101,11 +101,16 @@ def realign_by_distant_features(landmark_coords3d, imcoords_or_lm_vec, times, po
     else:
         landmark_vecs = landmark_vecs_from_imcoords(imcoords_or_lm_vec, calibs)
     landmark_vecs = np.nanmean(landmark_vecs, axis=0)
+    assert landmark_coords3d.shape[0] == landmark_vecs.shape[1], "Number of landmarks does not match camera vectors"
 
     no_common = 0
     for i_t, t in enumerate(times):
         frame_landmark_vectors = landmark_coords3d - positions[np.newaxis, i_t]
         landmark_dists = np.linalg.norm(frame_landmark_vectors, axis=-1, keepdims=True)
+        if min_dist is not None:
+            frame_landmark_vectors[landmark_dists[:,0]<min_dist] = np.nan
+        if percentile is not None:
+            frame_landmark_vectors[landmark_dists[:,0]<np.percentile(landmark_dists,percentile)] = np.nan
         frame_landmark_vectors /= landmark_dists
         landmark_vec_mask = ~np.any(np.isnan(frame_landmark_vectors), axis=-1)
         cam_vec_mask = ~np.any(np.isnan(landmark_vecs[i_t]), axis=-1)
