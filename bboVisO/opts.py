@@ -194,9 +194,12 @@ def repro_jax_po_b1_s1_nointerp():
     return iter_opts
 
 def repro_jax_po_b1_s1_nointerp_2p():
+    iter_opts = repro_jax_po_b1_s1_nointerp()
+    iter_opts['optimization']['jac'] = '2-point'
+    return iter_opts
+
+def repro_jax_po_b1_s1_2p():
     iter_opts = repro_jax_po_b1_s1()
-    iter_opts['optimization']['max_nfev'] = 2000
-    iter_opts['interpolate_high_error'] = -1
     iter_opts['optimization']['jac'] = '2-point'
     return iter_opts
 
