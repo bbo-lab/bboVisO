@@ -111,10 +111,22 @@ def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
 
         t = (pretimes[:-1] / (pretimes[:-1] + pretimes[1:]))[..., np.newaxis]
         th = np.arccos(np.clip(np.sum((vecs_cam[:-2] * vecs_cam[2:]), axis=-1), -1, 1))
-        vecs_cam_interp = (
+        small_anlge_mask = th < 1e-3  # Small angles might become numerically unstable and should use LERP
+        th[small_anlge_mask] = 1e-3
+
+        vecs_cam_interp_slerp = (
                 vecs_cam[:-2] * (np.sin((1 - t) * th) / np.sin(th))[..., np.newaxis] +
                 vecs_cam[2:] * (np.sin(t * th) / np.sin(th))[..., np.newaxis]
         )  # Slerp
+        vecs_cam_interp_lerp = (
+                vecs_cam[:-2] * (1 - t)[..., np.newaxis] +
+                vecs_cam[2:] * t[..., np.newaxis]
+        )  # Lerp
+        vecs_cam_interp_lerp /= np.linalg.norm(vecs_cam_interp_lerp, axis=-1, keepdims=True)
+
+        vecs_cam_interp = vecs_cam_interp_slerp
+
+        vecs_cam_interp[small_anlge_mask] = vecs_cam_interp_lerp[small_anlge_mask]
 
         # This changes cam_vecs IN PLACE!, replacing only the values previously nan
         vecs_cam_ireg = vecs_cam[1:-1]
@@ -124,7 +136,7 @@ def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
     imcoords_interp = landmark_imcoords_from_vecs(vecs_cams, calibs)
     interpolation_mask = np.zeros_like(imcoords, dtype=bool)
     interpolation_mask[np.array(sub_time_base_members)] = True
-
+    
     return imcoords_interp, vecs_cams, time_base, interpolation_mask
 
 
