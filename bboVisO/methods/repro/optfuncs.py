@@ -4,6 +4,8 @@ from jax import jit, jacfwd as jacobian
 from scipy.spatial.transform import Rotation as R
 
 from .optfuncs_ag import objfun
+
+objfun_jit = jit(objfun)
 from ..common import (objfun_jacobian_wrapper_sparse as objfun_jacobian_wrapper_sparse_common,
                       objfun_jacobian_wrapper_dense as objfun_jacobian_wrapper_dense_common,
                       make_jacobian_sparsity_mask as make_jacobian_sparsity_mask_common)
@@ -12,7 +14,7 @@ from ...ravel import unravel_vars as unravel_vars_base, unpack_calibs
 
 def objfun_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs, opts) -> np.ndarray:
     cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(calibs)
-    errors = np.array(jit(objfun)(landmarks, positions, oris_flu, R.from_matrix(cam_Rs).as_rotvec(), cam_ts,
+    errors = np.array(objfun_jit(landmarks, positions, oris_flu, R.from_matrix(cam_Rs).as_rotvec(), cam_ts,
                                   landmark_imcoords,
                                   1,  # TODO: Introduce landmark weights
                                   1,  # TODO: Introduce mask weights
@@ -24,7 +26,7 @@ def objfun_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs, opt
 
 def objfun_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
     obfun_inputs = unravel_vars(free_vars, args)
-    errors = np.array(jit(objfun)(*obfun_inputs))
+    errors = np.array(objfun_jit(*obfun_inputs))
 
     if no_ravel:
         return errors

@@ -133,7 +133,10 @@ def realign_by_distant_features(landmark_coords3d, imcoords_or_lm_vec, times, po
 
 
 def landmark_vecs_from_imcoords(landmark_imcoords, calibs):
-    cs = Camerasystem.from_calibs(calibs)
+    if isinstance(calibs, Camerasystem):
+        cs = calibs
+    else:
+        cs = Camerasystem.from_calibs(calibs)
 
     landmark_vecs_cams = np.empty(landmark_imcoords.shape[:-1] + (3,))
     for i_c, c in enumerate(cs.cameras):
@@ -143,7 +146,10 @@ def landmark_vecs_from_imcoords(landmark_imcoords, calibs):
 
 
 def landmark_imcoords_from_vecs(landmark_vecs, calibs):
-    cs = Camerasystem.from_calibs(calibs)
+    if isinstance(calibs, Camerasystem):
+        cs = calibs
+    else:
+        cs = Camerasystem.from_calibs(calibs)
 
     landmark_imcoords = np.empty(landmark_vecs.shape[:-1] + (2,))
     for i_c, c in enumerate(cs.cameras):
