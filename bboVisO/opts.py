@@ -32,6 +32,8 @@ def get_opts():
             # Interpolation threshold for check mode ()
             'interpolate_high_error': 100,
         },
+        # Ignore cams
+        'ignore_cams': [],
         # ravel functions
         'ravel': {
             'ravel_func': {'module': 'bboVisO.ravel', 'func': 'default_ravel_vars'},

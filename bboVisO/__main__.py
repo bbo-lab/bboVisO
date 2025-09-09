@@ -48,6 +48,8 @@ def main():
                         help="Number of images to generate starting from highest maxerror")
     parser.add_argument('--add_offset', type=float, required=False, nargs=1, default=[0.0],
                         help="Offset to add to second cam, for subframe resolution tests")
+    parser.add_argument('--ignore_cams', type=int, required=False, default=[],
+                        help="Removes all detections from these cameras")
     parser.add_argument('--simulation', required=False, default=False, action="store_true",
                         help="Simulate input data for testing purposes")
     parser.add_argument('--perturbation_deg', type=float, required=False, nargs=1, default=[0.2],
@@ -67,6 +69,8 @@ def main():
         opts["text_out"] = args.text_out[0]
     else:
         opts["text_out"] = False
+
+    opts["ignore_cams"] = args.ignore_cams
 
     if args.from_yml:
         from bboVisO.process import run  # noqa: E402

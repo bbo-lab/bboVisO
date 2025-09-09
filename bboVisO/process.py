@@ -48,6 +48,8 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                                       time_bases=detected_times,
                                                       label_identity=landmarks_identity)
 
+    landmark_imcoords[opts["ignore_cams"]] = np.nan
+
     # Remove all timepoints in which all cameras are nan
     data_mask = np.any(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2))
     data_idxs = np.where(data_mask)[0]
