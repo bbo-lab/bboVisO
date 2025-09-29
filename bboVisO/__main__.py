@@ -50,6 +50,8 @@ def main():
                         help="Offset to add to second cam, for subframe resolution tests")
     parser.add_argument('--ignore_cams', type=int, required=False, default=[],
                         help="Removes all detections from these cameras")
+    parser.add_argument('--remove_random_lms', type=int, required=False, default=0,
+                        help="Removes random landmarks")
     parser.add_argument('--simulation', required=False, default=False, action="store_true",
                         help="Simulate input data for testing purposes")
     parser.add_argument('--perturbation_deg', type=float, required=False, nargs=1, default=[0.2],
@@ -64,6 +66,8 @@ def main():
     # jax.config.update('jax_platform_name', opts['jax_backend'])
 
     opts["img_out_n"] = args.img_out_n[0]
+
+    opts["remove_random_lms"] = args.remove_random_lms
 
     if args.text_out:
         opts["text_out"] = args.text_out[0]

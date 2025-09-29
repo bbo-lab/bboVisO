@@ -88,7 +88,15 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     landmarks_opt = landmarks_all.copy()
     # ====== /Section for in-place testing ======
 
+    if opts["remove_random_lms"]>0:
+        landmarks_use_idxs = np.where(landmarks_use)[0]
+        landmarks_use[
+            landmarks_use_idxs[np.random.randint(0,landmarks_use.size,size=(opts["remove_random_lms"],))]
+        ] = False
+
     landmarks_mask = landmarks_use
+
+
     landmarks_opt_mask, positions_opt, oris_flu_opt, calibs = \
         viso.infer_position_attitude(time_base, calibs, opts,
                                      landmark_imcoords=landmark_imcoords[:, :, landmarks_mask],
@@ -102,6 +110,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                      imcoords_interp_mask=imcoords_interp_mask[:, :, landmarks_mask],
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
+    landmarks_opt[~landmarks_mask] = np.nan
 
     error_repro = bboVisO.methods.repro.optfuncs.objfun_runner(
         landmarks_opt[landmarks_mask], positions_opt, oris_flu_opt,
