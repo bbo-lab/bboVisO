@@ -91,7 +91,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     remove_random_lms_idxs = False
     if opts["remove_random_lms"]>0:
         landmarks_use_idxs = np.where(landmarks_use)[0]
-        remove_random_lms_idxs = landmarks_use_idxs[np.random.randint(0, landmarks_use.size, size=(opts["remove_random_lms"],))]
+        remove_random_lms_idxs = landmarks_use_idxs[np.random.randint(0,landmarks_use_idxs.size,size=(opts["remove_random_lms"],))]
         landmarks_use[remove_random_lms_idxs] = False
 
     landmarks_mask = landmarks_use
