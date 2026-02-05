@@ -41,6 +41,13 @@ def infer_position_attitude(times, calibs, opts,
     if oris_flu_init is None:
         oris_flu_init = np.full((landmark_imcoords.shape[1], 3), np.nan)
 
+    if landmarks_far is None:
+        landmarks_far = np.ones(landmarks_init.shape[0], dtype=bool)
+    if landmarks_optimize is None:
+        landmarks_optimize = np.zeros(landmarks_init.shape[0], dtype=bool)
+    if landmarks_far is None:
+        landmarks_weights = np.ones(landmarks_init.shape[0])
+
     # Timing
     t = time.time()
 
