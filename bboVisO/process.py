@@ -88,11 +88,11 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     landmarks_opt = landmarks_all.copy()
     # ====== /Section for in-place testing ======
 
+    remove_random_lms_idxs = False
     if opts["remove_random_lms"]>0:
         landmarks_use_idxs = np.where(landmarks_use)[0]
-        landmarks_use[
-            landmarks_use_idxs[np.random.randint(0,landmarks_use.size,size=(opts["remove_random_lms"],))]
-        ] = False
+        remove_random_lms_idxs = landmarks_use_idxs[np.random.randint(0, landmarks_use.size, size=(opts["remove_random_lms"],))]
+        landmarks_use[remove_random_lms_idxs] = False
 
     landmarks_mask = landmarks_use
 
@@ -110,7 +110,9 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
                                      imcoords_interp_mask=imcoords_interp_mask[:, :, landmarks_mask],
                                      )
     landmarks_opt[landmarks_mask] = landmarks_opt_mask
-    landmarks_opt[~landmarks_mask] = np.nan
+
+    if remove_random_lms_idxs:
+        landmarks_opt[remove_random_lms_idxs] = np.nan
 
     error_repro = bboVisO.methods.repro.optfuncs.objfun_runner(
         landmarks_opt[landmarks_mask], positions_opt, oris_flu_opt,
