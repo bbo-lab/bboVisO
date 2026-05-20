@@ -6,6 +6,7 @@ from scipy.spatial.transform import Rotation as R
 from .optfuncs_ag import objfun
 
 objfun_jit = jit(objfun)
+
 from ..common import (objfun_jacobian_wrapper_sparse as objfun_jacobian_wrapper_sparse_common,
                       objfun_jacobian_wrapper_dense as objfun_jacobian_wrapper_dense_common,
                       make_jacobian_sparsity_mask as make_jacobian_sparsity_mask_common)

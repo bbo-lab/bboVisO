@@ -8,10 +8,11 @@ from ..common import (objfun_jacobian_wrapper_sparse as objfun_jacobian_wrapper_
                       make_jacobian_sparsity_mask as make_jacobian_sparsity_mask_common)
 from ...ravel import unravel_vars as unravel_vars_base, unpack_calibs
 
+objfun_jit = jit(objfun)
 
 def objfun_runner(landmarks, positions, oris_flu, landmark_vecs, calibs, opts) -> np.ndarray:
     cam_Rs, cam_ts = unpack_calibs(calibs)[-2:]
-    errors = np.array(jit(objfun)(landmarks, positions, oris_flu, Rotation.from_matrix(cam_Rs).as_rotvec(), cam_ts,
+    errors = np.array(objfun_jit(landmarks, positions, oris_flu, Rotation.from_matrix(cam_Rs).as_rotvec(), cam_ts,
                                   landmark_vecs, 1, opts["lm_close_pen_weight"]))  # TODO: Introduce landmark weights
 
     return errors
@@ -19,7 +20,7 @@ def objfun_runner(landmarks, positions, oris_flu, landmark_vecs, calibs, opts) -
 
 def objfun_wrapper(free_vars, args, no_ravel=False) -> np.ndarray:
     obfun_inputs = unravel_vars(free_vars, args)
-    errors = np.array(jit(objfun)(*obfun_inputs))
+    errors = np.array(objfun_jit(*obfun_inputs))
     if no_ravel:
         return errors
     else:
