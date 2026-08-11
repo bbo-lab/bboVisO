@@ -13,6 +13,7 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
 
     unraveled_vars = unravel_func(free_vars, args)
     landmarks, positions, oris_flu, cam_rotvecs, cam_ts, marker_var, lm_weights, mask_weights = unraveled_vars[:8]
+    assert isinstance(mask_weights, np.ndarray), f"mask_weights must be a numpy array, but got {type(mask_weights)}"
     extra_args = unraveled_vars[8:]
 
     sm, sk, sn = marker_var.shape[:3]

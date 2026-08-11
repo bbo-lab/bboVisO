@@ -8,7 +8,7 @@ from bbo.geometry import RigidTransform
 
 
 def get_cam_time_bases(max_frame, cam_fps, cam_offsets, opts):
-    offsets = (np.array(cam_offsets)).astype(np.uint64)
+    offsets = (np.array(cam_offsets)).astype(np.uint64, copy=False)
 
     cam_time_bases = []
     for fps, offset in zip(cam_fps, offsets):

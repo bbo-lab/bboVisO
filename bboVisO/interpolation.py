@@ -15,7 +15,6 @@ def interpolate_high_error(times, positions, oris_flu, calibs, opts, landmarks, 
                            landmark_vecs=None, landmarks_optimize=None):
     if opts['interpolate_high_error'] == 0 or opts['interpolate_high_error'] == -1:
         return positions, oris_flu
-
     objfun_error = objfun_runner_repro(landmarks, positions, oris_flu,
                                        landmark_imcoords, calibs, opts)
     abserrors = np.sqrt(np.nansum(objfun_error ** 2, axis=-1))

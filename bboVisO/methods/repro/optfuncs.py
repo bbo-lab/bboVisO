@@ -5,7 +5,11 @@ from scipy.spatial.transform import Rotation as R
 
 from .optfuncs_ag import objfun
 
-objfun_jit = jit(objfun)
+import logging
+
+logger = logging.getLogger(__name__)
+
+objfun_jit = jit(objfun, static_argnames=["projection_model"]) #TODO backend?
 
 from ..common import (objfun_jacobian_wrapper_sparse as objfun_jacobian_wrapper_sparse_common,
                       objfun_jacobian_wrapper_dense as objfun_jacobian_wrapper_dense_common,
@@ -14,13 +18,16 @@ from ...ravel import unravel_vars as unravel_vars_base, unpack_calibs
 
 
 def objfun_runner(landmarks, positions, oris_flu, landmark_imcoords, calibs, opts) -> np.ndarray:
-    cam_matrices, ks, xis, cam_Rs, cam_ts = unpack_calibs(calibs)
+    cam_matrices, ks, xis, projection_models, cam_Rs, cam_ts = unpack_calibs(calibs)
+    logger.log(logging.INFO, "Unpacking Calibs")
+    assert np.all(projection_models == projection_models[0]), "All cameras must have the same projection model"
     errors = np.array(objfun_jit(landmarks, positions, oris_flu, R.from_matrix(cam_Rs).as_rotvec(), cam_ts,
                                   landmark_imcoords,
                                   1,  # TODO: Introduce landmark weights
                                   1,  # TODO: Introduce mask weights
-                                  cam_matrices, ks, xis,
+                                  cam_matrices, ks, xis, projection_models[0],
                                   opts["lm_close_pen_weight"]))
+    logger.log(logging.INFO, "Computed Objfun")
 
     return errors
 
@@ -63,7 +70,9 @@ def unravel_vars(free_vars, args):
     landmarks, positions, oris_flu, cam_rotvecs, cam_ts = unravel_vars_base(free_vars, args["ravel_args"])
 
     landmark_imcoords = args["landmark_imcoords"]
-    cam_matrices, ks, xis = unpack_calibs(args["calibs"])[:3]
+    cam_matrices, ks, xis, projection_models = unpack_calibs(args["calibs"])[:4]
+    projection_model = projection_models[0]
+    assert np.all(projection_models == projection_model), "All cameras must have the same projection model"
     lm_close_pen_weight = args["lm_close_pen_weight"]
     lm_weights = args["landmarks_weights"]
     weight_mask = args["weight_mask"]
@@ -71,7 +80,7 @@ def unravel_vars(free_vars, args):
     mask_weight = np.ones_like(weight_mask)
     mask_weight[weight_mask] = weight
     return (landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoords, lm_weights, mask_weight,
-            cam_matrices, ks, xis, lm_close_pen_weight)
+            cam_matrices, ks, xis, projection_model, lm_close_pen_weight)
 
 
 jacobians_repro = None
@@ -83,5 +92,5 @@ def get_jacobians(opts):
         if "jax_backend" not in opts:
             opts["jax_backend"] = "cpu"
             print("Set JAX backend to CPU")
-        jacobians_repro = [jit(jacobian(objfun, i_var), backend=opts["jax_backend"]) for i_var in range(5)]
+        jacobians_repro = [jit(jacobian(objfun, i_var), static_argnames=["projection_model"], backend=opts["jax_backend"]) for i_var in range(5)]
     return jacobians_repro

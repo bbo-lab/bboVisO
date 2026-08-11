@@ -8,7 +8,7 @@ from bboVisO.methods.common_ag import world_to_camerasystem, camerasystem_to_cam
 def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoords,
            lm_weights, mask_weight,
            cam_matrices, ks, xis,
-           lm_close_pen_weight):
+           projection_model, lm_close_pen_weight):
     # Transform landmarks into coordinate system of camera system
     landmark_coords = world_to_camerasystem(landmarks, positions, oris_flu)
 
@@ -17,9 +17,15 @@ def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoord
 
     landmark_coords = camfuncs_ag.board_to_unit_sphere(landmark_coords)
 
-    landmark_coords = camfuncs_ag.shift_camera(landmark_coords, xis)
+    if projection_model == "fisheye_equidistant":
+        landmark_coords = camfuncs_ag.to_ideal_plane_fisheye_equidistant(landmark_coords)
+    elif projection_model == "perspective":
+        landmark_coords = camfuncs_ag.shift_camera(landmark_coords, xis)
+        landmark_coords = camfuncs_ag.to_ideal_plane(landmark_coords)
+    else:
+        raise ValueError(f"Unknown projection model: {projection_model}")
 
-    landmark_coords = camfuncs_ag.to_ideal_plane(landmark_coords)
+
     landmark_coords = camfuncs_ag.distort(landmark_coords, ks)
     landmark_coords = camfuncs_ag.ideal_to_sensor(landmark_coords, cam_matrices)
 

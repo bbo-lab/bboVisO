@@ -134,7 +134,8 @@ def unpack_calibs(calib):
     cam_matrices = np.array([c["A"] for c in calib])
     ks = np.array([c["k"] for c in calib])
     xis = np.array([c["xi"] for c in calib])
+    projection_models = np.array([c.get("projection_model", None) for c in calib])
     cam_Rs = R.from_rotvec(np.array([c["rvec_cam"] for c in calib])).as_matrix()
     cam_ts = np.array([c["tvec_cam"] for c in calib])
 
-    return cam_matrices, ks, xis, cam_Rs, cam_ts
+    return cam_matrices, ks, xis, projection_models, cam_Rs, cam_ts
