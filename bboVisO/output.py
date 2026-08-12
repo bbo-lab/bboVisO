@@ -96,7 +96,7 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
         df['dy'] = landmarks_diff[:, 1]
         df['dz'] = landmarks_diff[:, 2]
         df.set_index("landmark", inplace=True)
-        df.to_csv(csv_file, sep='\t', index=True, header=list(df.columns))
+        df.to_csv(csv_file, sep='\t', index=True, header=list(df.columns), float_format="%.3f")
 
 
 def filter_and_save(csv_file, df, opts, sort="t_us", ascending=True):
@@ -109,4 +109,4 @@ def filter_and_save(csv_file, df, opts, sort="t_us", ascending=True):
             df = pd.concat((df, old_pd_table))
     df.set_index("t_us", inplace=True)
     df.sort_values(by=sort, inplace=True, ascending=ascending)
-    df.to_csv(csv_file, sep='\t', index=True, header=list(df.columns))
+    df.to_csv(csv_file, sep='\t', index=True, header=list(df.columns), float_format="%.3f")
