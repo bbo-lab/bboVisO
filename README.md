@@ -1,5 +1,5 @@
 # bboVisO
-Simple visual odometry for omnidirectional cameras
+Simple pose and orientation estimation for omnidirectional cameras
 
 ## Running
 Run by supplying a config file:
