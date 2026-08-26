@@ -1,5 +1,5 @@
 # bboVisO
-Simple pose and orientation estimation for omnidirectional cameras
+Simple positon and orientation estimation for omnidirectional cameras
 
 ## Running
 Run by supplying a config file:
