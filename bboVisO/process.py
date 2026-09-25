@@ -1,4 +1,5 @@
 import warnings
+import logging
 
 import numpy as np
 
@@ -12,49 +13,39 @@ from bbo import label_lib
 
 # Some debug output
 viso.debug = True
-
+logger = logging.getLogger(__name__)
 
 def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
-    # Names of all landmarks
-    labels = sorted(list(landmark_coordinates["landmarks"].keys()))
+    # Find all usable landmarks that are labeled
+    landmark_names = [ln for ln in landmark_coordinates["landmarks"] if landmark_coordinates["landmarks"][ln].get("use", False)]
+    landmark_labels = label_lib.update(landmark_labels, do_purge_nans=True)
+    landmark_label_names = sorted(label_lib.get_labels(landmark_labels, allow_empty=False))
+    tracking_landmark_names = list(set(landmark_names).intersection(set(landmark_label_names)))
 
-    # Origin of resulting coordinate system
-    origin = np.array(landmark_coordinates["origin"]["position"])
-
-    # Frames with labels
-    detected_frames = label_lib.get_labeled_frame_idxs(landmark_labels, label_set=labels)
-    print(len(detected_frames))
-
-    detected_times = [t[detected_frames] for t in time_bases]
-
-    # Marked labels
-    detected_labels = sorted(label_lib.get_labels(landmark_labels))
-    # Reduce labels to those that are also present as landmarks
-    detected_labels = [d for d in detected_labels if d in labels]
-
-    # Convert landmark dictionary to array and extract metadata to masks
-    landmarks_all, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_use, landmarks_weights = (
-        landmarks_to_array(landmark_coordinates, labels))
+    # Extract landmark coordiantes as array
+    landmark_array, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_weights = (
+        landmarks_to_array(landmark_coordinates, tracking_landmark_names))
     # Subtract origin
-    landmarks_all -= origin
+    origin = np.array(landmark_coordinates["origin"]["position"])
+    landmark_array -= origin
+    landmarks_use = np.full(len(tracking_landmark_names), True, dtype=bool)
 
-    # Do not use landmarks that have never been marked in labels
-    landmarks_use &= np.array([lb in detected_labels for lb in labels])
-
+    # Find frames with detections from tracking_landmark_names
+    # Might still include all nans
+    detected_frames = label_lib.get_labeled_frame_idxs(landmark_labels, label_set=tracking_landmark_names)
+    detected_times = [t[detected_frames] for t in time_bases]
     # Convert labels dict to array. This will result in an n_cam x n_times x n_landmarks x 2 array.
-    # n_times is sort(unique()) of all time bases
     # If frame times between cameras do not align, the labels of respective other cameras will be nan
-    landmark_imcoords, time_base = label_lib.to_numpy(landmark_labels, detected_frames, labels,
-                                                      time_bases=detected_times,
-                                                      label_identity=landmarks_identity)
+    landmark_imcoords, time_base = label_lib.to_numpy(landmark_labels,
+                                                      extract_labels=tracking_landmark_names,
+                                                      extract_frame_idxs=detected_frames,
+                                                      time_bases=time_bases,
+                                                      time_bases_complete=True,
+                                                      label_identity=landmarks_identity,
+                                                      strip_nans=True)
 
+    # Disable cams if configured
     landmark_imcoords[opts["ignore_cams"]] = np.nan
-
-    # Remove all timepoints in which all cameras are nan
-    data_mask = np.any(~np.isnan(landmark_imcoords[:, :, :, 0]), axis=(0, 2))
-    data_idxs = np.where(data_mask)[0]
-    landmark_imcoords = landmark_imcoords[:, data_idxs[0]:data_idxs[-1] + 1]
-    time_base = time_base[data_idxs[0]:data_idxs[-1] + 1]
 
     # Cut down to desired time range
     time_base_mask = (opts["time_range"][0] <= time_base) & (time_base <= opts["time_range"][1])
@@ -77,6 +68,10 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     imcoords_interp_mask = imcoords_interp_mask[:, sufficient_mask]
     landmark_vecs = landmark_vecs[:, sufficient_mask]
 
+    logger.log(logging.INFO, f"Optimizing {landmark_imcoords.shape[1]} frames with {landmark_imcoords.shape[2]} landmarks.\n"
+                             f"{np.count_nonzero(~np.isnan(landmark_imcoords_orig))/2} labels before interpolation,\n"
+                             f"{np.count_nonzero(~np.isnan(landmark_imcoords))/2} labels after interpolation.")
+
     # ====== Section for in-place testing ======
     # Change Jacobian
     # opts_optim["jac"] = viso.objfun_repro_jacobian_wrapper
@@ -85,7 +80,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     # Inject manual initialization
     positions_opt = None
     oris_flu_opt = None
-    landmarks_opt = landmarks_all.copy()
+    landmarks_opt = landmark_array.copy()
     # ====== /Section for in-place testing ======
 
     remove_random_lms_idxs = False
@@ -131,4 +126,4 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
 
     landmarks, positions, oris_flu = (landmarks_opt, positions_opt, oris_flu_opt)
 
-    return landmarks, positions, oris_flu, time_base, landmark_imcoords, error_repro, labels, calibs
+    return landmarks, positions, oris_flu, time_base, landmark_imcoords, error_repro, tracking_landmark_names, calibs

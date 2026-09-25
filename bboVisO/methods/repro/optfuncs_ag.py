@@ -19,7 +19,7 @@ def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoord
 
     if projection_model == "fisheye_equidistant":
         landmark_coords = camfuncs_ag.to_ideal_plane_fisheye_equidistant(landmark_coords)
-    elif projection_model == "perspective":
+    elif projection_model == "perspective" or projection_model is None:
         landmark_coords = camfuncs_ag.shift_camera(landmark_coords, xis)
         landmark_coords = camfuncs_ag.to_ideal_plane(landmark_coords)
     else:

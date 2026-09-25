@@ -95,47 +95,70 @@ def interpolate_mask(time, pos, ori, mask):
 
 
 def interpolate_imcoords(imcoords, time_base, calibs, sub_time_bases=None):
-    # Interpolates time points in array_2d that are not part of sub_time_bases
+    """Fill unrecorded times between consecutive valid camera measurements.
+
+    Interpolate each landmark only when both adjacent recorded frames have a
+    valid direction. Missing detections at recorded times are not bridged, and
+    times outside the camera's measurements are not extrapolated. With no
+    sub_time_bases, every time is treated as recorded. The returned boolean
+    mask marks successfully interpolated image coordinates.
+    """
     vecs_cams = landmark_vecs_from_imcoords(imcoords, calibs)
+    times = np.asarray(time_base)
+    interpolation_mask = np.zeros_like(imcoords, dtype=bool)
 
-    pretimes = np.diff(time_base)
-
-    sub_time_base_members = []
     for i_c, vecs_cam in enumerate(vecs_cams):
-        # create mask of frames that belong to one of the sub_time_bases that make up the array_time_base
         if sub_time_bases is None:
-            sub_time_base_members.append(np.ones_like(time_base, dtype=bool))
-        else:
-            sub_time_base_members.append(np.isin(time_base, sub_time_bases[i_c]))
+            continue
+        recorded = np.isin(times, sub_time_bases[i_c])
+        recorded_idxs = np.flatnonzero(recorded)
+        if recorded_idxs.size < 2:
+            continue
 
-        t = (pretimes[:-1] / (pretimes[:-1] + pretimes[1:]))[..., np.newaxis]
-        th = np.arccos(np.clip(np.sum((vecs_cam[:-2] * vecs_cam[2:]), axis=-1), -1, 1))
-        small_anlge_mask = th < 1e-3  # Small angles might become numerically unstable and should use LERP
-        th[small_anlge_mask] = 1e-3
+        # Bracket every additional time by consecutive recorded frames, even
+        # when multiple rows of the shared time base fall between them.
+        target_idxs = np.flatnonzero(~recorded)
+        post = np.searchsorted(recorded_idxs, target_idxs)
+        inside = (post > 0) & (post < recorded_idxs.size)
+        target_idxs = target_idxs[inside]
+        post = post[inside]
+        if target_idxs.size == 0:
+            continue
+        pre_idxs = recorded_idxs[post - 1]
+        post_idxs = recorded_idxs[post]
 
-        vecs_cam_interp_slerp = (
-                vecs_cam[:-2] * (np.sin((1 - t) * th) / np.sin(th))[..., np.newaxis] +
-                vecs_cam[2:] * (np.sin(t * th) / np.sin(th))[..., np.newaxis]
-        )  # Slerp
-        vecs_cam_interp_lerp = (
-                vecs_cam[:-2] * (1 - t)[..., np.newaxis] +
-                vecs_cam[2:] * t[..., np.newaxis]
-        )  # Lerp
-        vecs_cam_interp_lerp /= np.linalg.norm(vecs_cam_interp_lerp, axis=-1, keepdims=True)
+        pre_vecs = vecs_cam[pre_idxs]
+        post_vecs = vecs_cam[post_idxs]
+        fill = (np.isnan(vecs_cam[target_idxs]).any(axis=-1)
+                & np.isfinite(pre_vecs).all(axis=-1)
+                & np.isfinite(post_vecs).all(axis=-1))
+        rows, landmarks = np.nonzero(fill)
+        if rows.size == 0:
+            continue
 
-        vecs_cam_interp = vecs_cam_interp_slerp
+        pre_vecs = pre_vecs[rows, landmarks]
+        post_vecs = post_vecs[rows, landmarks]
+        t = ((times[target_idxs[rows]] - times[pre_idxs[rows]])
+             / (times[post_idxs[rows]] - times[pre_idxs[rows]]))[:, np.newaxis]
+        th = np.arccos(np.clip(np.sum(pre_vecs * post_vecs, axis=-1), -1, 1))
+        small_angle = th < 1e-3
+        th_safe = np.where(small_angle, 1e-3, th)[:, np.newaxis]
+        interp_vecs = (pre_vecs * np.sin((1 - t) * th_safe)
+                       + post_vecs * np.sin(t * th_safe)) / np.sin(th_safe)
 
-        vecs_cam_interp[small_anlge_mask] = vecs_cam_interp_lerp[small_anlge_mask]
+        # Normalized LERP avoids instability for nearly identical directions.
+        lerp = pre_vecs[small_angle] * (1 - t[small_angle]) + post_vecs[small_angle] * t[small_angle]
+        lerp /= np.linalg.norm(lerp, axis=-1, keepdims=True)
+        interp_vecs[small_angle] = lerp
 
-        # This changes cam_vecs IN PLACE!, replacing only the values previously nan
-        vecs_cam_ireg = vecs_cam[1:-1]
-        mask = np.isnan(vecs_cam_ireg) & (~sub_time_base_members[-1][1:-1, np.newaxis, np.newaxis])
-        vecs_cam_ireg[mask] = vecs_cam_interp[mask]
+        valid = np.isfinite(interp_vecs).all(axis=-1)
+        filled_idxs = target_idxs[rows[valid]]
+        filled_landmarks = landmarks[valid]
+        vecs_cam[filled_idxs, filled_landmarks] = interp_vecs[valid]
+        interpolation_mask[i_c, filled_idxs, filled_landmarks] = True
 
     imcoords_interp = landmark_imcoords_from_vecs(vecs_cams, calibs)
-    interpolation_mask = np.zeros_like(imcoords, dtype=bool)
-    interpolation_mask[np.array(sub_time_base_members)] = True
-    
+    interpolation_mask &= np.isfinite(imcoords_interp)
     return imcoords_interp, vecs_cams, time_base, interpolation_mask
 
 

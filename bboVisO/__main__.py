@@ -113,7 +113,8 @@ def main():
                     opts["time_range"][i] = data["time_range"][i]
 
             # Load labels
-            landmark_labels = label_lib.load(label_data, v0_format=True)
+            landmark_labels = label_lib.load(label_data, load_version="v0", load_formats=("yml", "csv"))
+            landmark_labels = label_lib.update(landmark_labels, do_purge_nans=True)
             landmark_frames = label_lib.get_labeled_frame_idxs(landmark_labels)
 
             # Assign times to landmark frames ...
