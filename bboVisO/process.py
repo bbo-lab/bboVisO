@@ -20,7 +20,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     landmark_names = [ln for ln in landmark_coordinates["landmarks"] if landmark_coordinates["landmarks"][ln].get("use", False)]
     landmark_labels = label_lib.update(landmark_labels, do_purge_nans=True)
     landmark_label_names = sorted(label_lib.get_labels(landmark_labels, allow_empty=False))
-    tracking_landmark_names = list(set(landmark_names).intersection(set(landmark_label_names)))
+    tracking_landmark_names = landmark_names  # list(set(landmark_names).intersection(set(landmark_label_names)))
 
     # Extract landmark coordiantes as array
     landmark_array, landmarks_far, landmarks_identity, landmarks_optimize, landmarks_weights = (
@@ -39,6 +39,7 @@ def run(landmark_labels, landmark_coordinates, calibs, time_bases, opts):
     landmark_imcoords, time_base = label_lib.to_numpy(landmark_labels,
                                                       extract_labels=tracking_landmark_names,
                                                       extract_frame_idxs=detected_frames,
+                                                      extract_inexistent_labels=True,
                                                       time_bases=time_bases,
                                                       time_bases_complete=True,
                                                       label_identity=landmarks_identity,
