@@ -8,7 +8,7 @@ from bboVisO.helper import landmarks_to_array
 
 
 def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, opts, landmark_labels,
-                 landmark_coordinates=None, combine_transformation=False):
+                 landmark_coordinates=None, combine_transformation=False, pos_formatter=None, rot_formatter=None):
     error_repro = error_repro.copy()
     error_repro[error_repro == 0] = np.nan
     path_base = Path(path)
@@ -22,6 +22,10 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
         df['x'] = data[0]
         df['y'] = data[1]
         df['z'] = data[2]
+
+        if pos_formatter is not None:
+            for col in ['x', 'y', 'z']:
+                df[col] = df[col].apply(pos_formatter)
         filter_and_save(csv_file, df, opts)
 
         # Orientations
@@ -33,6 +37,9 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
         df['y'] = data[1]
         df['z'] = data[2]
         df['w'] = data[3]
+        if rot_formatter is not None:
+            for col in ['x', 'y', 'z', 'w']:
+                df[col] = df[col].apply(rot_formatter)
         filter_and_save(csv_file, df, opts)
     else:
         # Positions
@@ -49,6 +56,12 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
         df['ry'] = data[1]
         df['rz'] = data[2]
         df['rw'] = data[3]
+        if pos_formatter is not None:
+            for col in ['x', 'y', 'z']:
+                df[col] = df[col].apply(pos_formatter)
+        if rot_formatter is not None:
+            for col in ['rx', 'ry', 'rz', 'rw']:
+                df[col] = df[col].apply(rot_formatter)
         filter_and_save(csv_file, df, opts)
 
     # Errors
@@ -96,7 +109,16 @@ def save_to_text(path, time_base, landmarks, positions, oris_flu, error_repro, o
         df['dy'] = landmarks_diff[:, 1]
         df['dz'] = landmarks_diff[:, 2]
         df.set_index("landmark", inplace=True)
-        df.to_csv(csv_file, sep='\t', index=True, header=list(df.columns), float_format="%.3f")
+
+        if pos_formatter is not None:
+            for col in ['x', 'y', 'z']:
+                df[col] = df[col].apply(pos_formatter)
+
+        if rot_formatter is not None:
+            for col in ['dx', 'dy', 'dz']:
+                df[col] = df[col].apply(rot_formatter)
+
+        df.to_csv(csv_file, sep='\t', index=True, header=list(df.columns))
 
 
 def filter_and_save(csv_file, df, opts, sort="t_us", ascending=True):
