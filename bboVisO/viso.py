@@ -1,7 +1,8 @@
 import importlib
 import os
 import sys
-# import sys
+import queue
+import threading
 import time
 
 import jax
@@ -45,8 +46,13 @@ def infer_position_attitude(times, calibs, opts,
         landmarks_far = np.ones(landmarks_init.shape[0], dtype=bool)
     if landmarks_optimize is None:
         landmarks_optimize = np.zeros(landmarks_init.shape[0], dtype=bool)
-    if landmarks_far is None:
-        landmarks_weights = np.ones(landmarks_init.shape[0])
+
+    if landmarks_weights is None:
+        landmarks_weights = np.ones(shape=(1, 1, *landmarks_init.shape[0]))
+    else:
+        landmarks_weights = np.sqrt(landmarks_weights)
+        if landmarks_weights.ndim == 1:
+            landmarks_weights = landmarks_weights[np.newaxis, np.newaxis, :] #Backward compatibility for only single weight per frame and camera
 
     # Timing
     t = time.time()
@@ -101,9 +107,9 @@ def infer_position_attitude(times, calibs, opts,
 
             positions_prev = positions_init.copy()  # overall positions
             cost = np.full((n_slices, 2), np.nan)
-            print("2 ", np.sum(np.isnan(positions_init)), np.sum(np.isnan(oris_flu_init)),
-                  np.sum(np.isnan(landmarks_init)),
-                  np.sum(np.isinf(positions_init)), np.sum(np.isinf(oris_flu_init)), np.sum(np.isinf(landmarks_init)))
+            print("2 ", np.count_nonzero(np.isnan(positions_init)), np.count_nonzero(np.isnan(oris_flu_init)),
+                  np.count_nonzero(np.isnan(landmarks_init)),
+                  np.count_nonzero(np.isinf(positions_init)), np.count_nonzero(np.isinf(oris_flu_init)), np.count_nonzero(np.isinf(landmarks_init)))
 
             # if iter_opts["parallelize"]:
             #     print("Overwrote frame_slice_generator")
@@ -121,44 +127,64 @@ def infer_position_attitude(times, calibs, opts,
                                                    optimize=opt,
                                                    landmarks_optimize=landmarks_optimize,
                                                    landmarks_far=landmarks_far,
-                                                   landmarks_weights=landmarks_weights,
                                                    obj_func=method.objfun_wrapper)
 
-            if iter_opts["parallelize"]:
-                with (concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count() // 2) as executor):
-                    futures = {executor.submit(
-                        partial_optimize_frame_slice, (positions_init[frame_slice],
-                                                       oris_flu_init[frame_slice],
-                                                       landmark_imcoords[:, frame_slice],
-                                                       landmark_vecs[:, frame_slice],
-                                                       imcoords_interp_mask[:, frame_slice]
-                                                       if imcoords_interp_mask is not None else None,)
-                    ): frame_slice for frame_slice in frame_slice_generator}
+            def get_sliced_args(frame_slice):
+                return (positions_init[frame_slice],
+                       oris_flu_init[frame_slice],
+                       landmark_imcoords[:, frame_slice],
+                       landmark_vecs[:, frame_slice],
+                       None if landmarks_weights is None else landmarks_weights[:, [0] if landmarks_weights.shape[1] == 1 else frame_slice],
+                       imcoords_interp_mask[:, frame_slice] if imcoords_interp_mask is not None else None,)
 
-                    with tqdm(total=n_slices) as pbar:
-                        for future in concurrent.futures.as_completed(futures):
+            if iter_opts["parallelize"] and n_slices > 1:
+                if not hasattr(sys, "_is_gil_enabled") or sys._is_gil_enabled():
+                    with (concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count() // 2) as executor):
+                        futures = {executor.submit(
+                            partial_optimize_frame_slice, get_sliced_args(frame_slice)
+                        ): frame_slice for frame_slice in frame_slice_generator}
+
+                        for future in tqdm(concurrent.futures.as_completed(futures), total=n_slices):
                             frame_slice = futures[future]
                             slice_result, slice_cost = future.result()
 
                             update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
                                                   positions_init, oris_flu_init, calibs, cost, opt)
+                else:
+                    max_workers = os.cpu_count() // 2
+                    work_queue = queue.Queue(maxsize=max_workers)
+                    lock = threading.Lock()
+                    def worker():
+                        while True:
+                            frame_slice = work_queue.get()
+                            try:
+                                if frame_slice is None:
+                                    return
+                                sliced_args = get_sliced_args(frame_slice)
+                                slice_result, slice_cost = partial_optimize_frame_slice(sliced_args)
 
-                            pbar.update(1)
+                                with lock:
+                                    update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
+                                        positions_init, oris_flu_init, calibs, cost,opt,
+                                    )
+                            finally:
+                                work_queue.task_done()
 
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        workers = [executor.submit(worker) for _ in range(max_workers)]
+                        for frame_slice in tqdm(frame_slice_generator, total=n_slices):
+                            work_queue.put(frame_slice)
+                        for _ in range(max_workers):
+                            work_queue.put(None)
+                        work_queue.join()
+                        for future in workers:
+                            future.result()
             else:
-                with tqdm(total=n_slices) as pbar:
-                    for frame_slice in frame_slice_generator:
-                        slice_result, slice_cost = partial_optimize_frame_slice(
-                            (positions_init[frame_slice],
-                             oris_flu_init[frame_slice],
-                             landmark_imcoords[:, frame_slice],
-                             landmark_vecs[:, frame_slice],
-                             imcoords_interp_mask[:, frame_slice] if imcoords_interp_mask is not None else None,))
+                for frame_slice in tqdm(frame_slice_generator, total=n_slices):
+                    slice_result, slice_cost = partial_optimize_frame_slice(get_sliced_args(frame_slice))
 
-                        update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
-                                              positions_init, oris_flu_init, calibs, cost, opt)
-
-                        pbar.update(1)
+                    update_slices_inplace(frame_slice, slice_result, slice_cost, landmarks_init,
+                                          positions_init, oris_flu_init, calibs, cost, opt)
 
             # Normalize e.g. too long vectors from multiple revolutions
             oris_flu_init = R.from_rotvec(oris_flu_init).as_rotvec()
@@ -189,9 +215,8 @@ def time_jacobian(jac, vars_free, objfun_args):
 
 
 def optimize_frame_slice(sliced_inputs, calibs, iter_opts, landmarks_init, optimize,
-                         landmarks_optimize, landmarks_far, landmarks_weights,
-                         obj_func):
-    positions_init, oris_flu_init, landmark_imcoords, landmark_vecs, imcoords_interp_mask = sliced_inputs
+                         landmarks_optimize, landmarks_far, obj_func):
+    positions_init, oris_flu_init, landmark_imcoords, landmark_vecs, landmarks_weights, imcoords_interp_mask = sliced_inputs
     vars_free, objfun_args, optim_args = (
         make_optim_input(calibs, iter_opts,
                          landmarks_init,

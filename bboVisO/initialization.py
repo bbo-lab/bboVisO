@@ -53,7 +53,7 @@ def make_optim_input(calibs, opts,
         'ravel_args': ravel_args,
         'landmark_imcoords': landmark_imcoords,
         'landmark_vecs': landmark_vecs,
-        'landmarks_weights': landmarks_weights[np.newaxis, np.newaxis, :, np.newaxis],  # Reshape for later mult.
+        'landmarks_weights': landmarks_weights[:, :, :, np.newaxis],  # Add xy dimension for broadcasting
         'weight_mask': np.any(weight_mask, axis=-1, keepdims=True),
         'weight': weight,
         'single_position': opts["single_position"],
