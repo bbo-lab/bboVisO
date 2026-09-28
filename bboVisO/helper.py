@@ -112,7 +112,7 @@ def realign_by_distant_features(landmark_coords3d, imcoords_or_lm_vec, times, po
         cam_vec_mask = ~np.any(np.isnan(landmark_vecs[i_t]), axis=-1)
         common_mask = landmark_vec_mask & cam_vec_mask
 
-        if np.sum(common_mask) < 2:
+        if np.count_nonzero(common_mask) < 2:
             no_common += 1
             continue
 

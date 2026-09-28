@@ -1,8 +1,12 @@
+
 from jax import numpy as np
 
 from calibcam import camfunctions_ag as camfuncs_ag
 
 from bboVisO.methods.common_ag import world_to_camerasystem, camerasystem_to_cameras, calc_inverse_lm_pos_distance_sum
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoords,
@@ -16,6 +20,10 @@ def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoord
     landmark_coords = camerasystem_to_cameras(landmark_coords, cam_rotvecs, cam_ts)
 
     landmark_coords = camfuncs_ag.board_to_unit_sphere(landmark_coords)
+
+    if projection_model is None:
+        logger.log(logging.WARNING, "Deprecated: projection_model is None, defaulting to perspective")
+        projection_model = "perspective"
 
     if projection_model == "fisheye_equidistant":
         landmark_coords = camfuncs_ag.to_ideal_plane_fisheye_equidistant(landmark_coords)

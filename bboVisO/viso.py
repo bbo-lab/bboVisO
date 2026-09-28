@@ -193,7 +193,8 @@ def infer_position_attitude(times, calibs, opts,
             max_pos_shift = np.nanmax(np.linalg.norm((positions_prev - positions_init), axis=-1))
             print(f"Max pos shift {max_pos_shift:.6f}")
 
-            print(f"Cost reduced from {np.nansum(np.array(cost[:, 0])):.2f} to {np.nansum(np.array(cost[:, 1])):.2f}")
+            old_cost, new_cost = np.nansum(np.array(cost[:, 0])), np.nansum(np.array(cost[:, 1]))
+            print(f"Cost reduced from {old_cost:.2f} to {new_cost:.2f} ({new_cost / old_cost * 100:.2f}%)")
 
     if opts["iterations"][-1]["realign_by_distant_features"]:
         print("realign_by_distant_features")

@@ -7,8 +7,6 @@ import sys
 
 import yaml
 
-from svidreader import SVidReader
-
 import calibcamlib
 from bbo import label_lib
 
@@ -18,6 +16,7 @@ from bboVisO.helper import get_cam_time_bases
 from bboVisO.output import save_to_text
 from bboVisO.visualisation import plot_frames
 from calibcamlib import yaml_helper
+import logging
 
 # single precision significantly increases the objective function at ground truth (1e-12 -> 1e-3)!
 import jax
@@ -58,10 +57,16 @@ def main():
                         help="Landmark direction perturbation in simulation")
     parser.add_argument('--landmark_radius', type=float, required=False, nargs=1, default=[30],
                         help="Landmark distance in simulation")
+    parser.add_argument("--jax_backend", type=str, required=False, default="cpu", help="JAX backend to use (cpu, gpu, tpu)")
+    parser.add_argument('--loglevel', type=str, default="INFO", help="Logging level (DEBUG, INFO, WARN, ERROR)")
+    parser.add_argument('--profile-output', type=str, required=False, default=None,)
+
     args = parser.parse_args()
     if not args.nodebug:
         viso.debug = True
     opts = bboVisO.opts.get_opts()
+
+    logging.basicConfig(level=getattr(logging, args.loglevel.upper(), None), format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     # jax.config.update('jax_platform_name', opts['jax_backend'])
 
@@ -73,6 +78,9 @@ def main():
         opts["text_out"] = args.text_out[0]
     else:
         opts["text_out"] = False
+
+    if args.jax_backend is not None:
+        opts["jax_backend"] = args.jax_backend
 
     opts["ignore_cams"] = args.ignore_cams
 
@@ -133,6 +141,10 @@ def main():
             multicam_calibration = calibcamlib.Camerasystem.load_dict(calibration.as_posix())
             calibs = multicam_calibration["calibs"]
 
+            if args.profile_output is not None:
+                from jax import profiler
+                profiler.start_trace(args.profile_output)
+
             # Run odometry
             landmarks, positions, oris, res_time_base, landmark_imcoords, error_repro, landmark_labels, calibs = \
                 run(
@@ -141,6 +153,11 @@ def main():
                     calibs=calibs,
                     time_bases=cam_time_bases,
                     opts=opts)
+
+            if args.profile_output is not None:
+                from jax import profiler
+                profiler.stop_trace()
+
             multicam_calibration["calibs"] = calibs
 
             # Generate text files from output
@@ -157,6 +174,7 @@ def main():
 
             # Generate images from output (DEPRECATED: Use check GUI instead!)
             if args.img_out and videos is not None:
+                from svidreader import SVidReader
                 path = Path(opts["text_out"]).expanduser().resolve() / data["name"]
                 readers = [SVidReader(vid) for vid in videos]
 

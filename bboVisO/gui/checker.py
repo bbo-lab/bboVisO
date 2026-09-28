@@ -119,7 +119,7 @@ class bboVisOchecker(QMainWindow):
 
         self.landmark_imcoords, self.times = label_lib.to_numpy(label_data, self.landmark_frames, self.landmark_labels,
                                                                 time_bases=self.detected_times,
-                                                                label_identity=landmarks_identity)
+                                                                label_identity=landmarks_identity, extract_inexistent_labels=True)
 
         self.landmark_imcoords = bboVisO.interpolation.interpolate_imcoords(self.landmark_imcoords, self.times, self.calibs,
                                                                             self.detected_times)[0]
