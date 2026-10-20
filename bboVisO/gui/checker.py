@@ -1,10 +1,11 @@
 import sys
 import matplotlib
 
-from PyQt5 import QtGui
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QWidget,
-                             QSlider, QLineEdit, QComboBox, QPushButton)
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from PySide6 import QtGui
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QWidget,
+                               QSlider, QLineEdit, QComboBox, QPushButton)
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import numpy as np
 import pandas as pd
@@ -22,7 +23,7 @@ from bboVisO import helper
 from bbo import label_lib
 import paho.mqtt.client as mqtt
 
-matplotlib.use('Qt5Agg')
+matplotlib.use('QtAgg')
 
 
 class bboVisOchecker(QMainWindow):
@@ -119,7 +120,8 @@ class bboVisOchecker(QMainWindow):
 
         self.landmark_imcoords, self.times = label_lib.to_numpy(label_data, self.landmark_frames, self.landmark_labels,
                                                                 time_bases=self.detected_times,
-                                                                label_identity=landmarks_identity, extract_inexistent_labels=True)
+                                                                label_identity=landmarks_identity,
+                                                                extract_inexistent_labels=True)
 
         self.landmark_imcoords = bboVisO.interpolation.interpolate_imcoords(self.landmark_imcoords, self.times, self.calibs,
                                                                             self.detected_times)[0]
@@ -268,7 +270,7 @@ class bboVisOchecker(QMainWindow):
         time_layout = QHBoxLayout()
         # Slider
         self.components["controls"]["slider_t"] = QSlider()
-        self.components["controls"]["slider_t"].setOrientation(1)  # Vertical orientation
+        self.components["controls"]["slider_t"].setOrientation(Qt.Orientation.Horizontal)
         self.components["controls"]["slider_t"].setMinimum(0)
         self.components["controls"]["slider_t"].setMaximum(len(self.times) - 1)
         time_layout.addWidget(self.components["controls"]["slider_t"])
@@ -476,4 +478,4 @@ def main(data, opts):
     app = QApplication(sys.argv)
     main_window = bboVisOchecker(data, opts)
     main_window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
