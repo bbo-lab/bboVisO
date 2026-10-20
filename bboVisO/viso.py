@@ -127,7 +127,8 @@ def infer_position_attitude(times, calibs, opts,
                                                    optimize=opt,
                                                    landmarks_optimize=landmarks_optimize,
                                                    landmarks_far=landmarks_far,
-                                                   obj_func=method.objfun_wrapper)
+                                                   obj_func=method.objfun_wrapper,
+                                                   update_error_cap=getattr(method, "update_error_cap", None))
 
             def get_sliced_args(frame_slice):
                 return (positions_init[frame_slice],
@@ -216,7 +217,7 @@ def time_jacobian(jac, vars_free, objfun_args):
 
 
 def optimize_frame_slice(sliced_inputs, calibs, iter_opts, landmarks_init, optimize,
-                         landmarks_optimize, landmarks_far, obj_func):
+                         landmarks_optimize, landmarks_far, obj_func, update_error_cap=None):
     positions_init, oris_flu_init, landmark_imcoords, landmark_vecs, landmarks_weights, imcoords_interp_mask = sliced_inputs
     vars_free, objfun_args, optim_args = (
         make_optim_input(calibs, iter_opts,
@@ -231,6 +232,11 @@ def optimize_frame_slice(sliced_inputs, calibs, iter_opts, landmarks_init, optim
                          weight=iter_opts["interpolated_weight"],
                          landmark_imcoords=landmark_imcoords,  # [:, frame_slice]
                          landmark_vecs=landmark_vecs))  # [:, frame_slice]
+
+    # Cap is fixed for this least_squares run and based on the errors at initialization
+    if update_error_cap is not None:
+        update_error_cap(vars_free, objfun_args,
+                         iter_opts.get("repro_error_cap_min", 0.), iter_opts.get("repro_error_cap_factor", -1))
 
     error = obj_func(vars_free, objfun_args)
     cost_pre = np.sum(error ** 2) / 2

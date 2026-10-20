@@ -9,8 +9,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def cap_errors(errors2d, error_cap):
+    # Smoothly cap the 2D error norm of each landmark at error_cap (px), ~identity for norms << error_cap.
+    # error_cap=inf disables capping. Smooth everywhere (no division by the norm), so safe for jit and autodiff.
+    r2 = np.sum(errors2d ** 2, axis=-1, keepdims=True)
+    return errors2d / np.sqrt(1 + r2 / error_cap ** 2)
+
+
 def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoords,
-           lm_weights, mask_weight,
+           lm_weights, residual_args,
            cam_matrices, ks, xis,
            projection_model, lm_close_pen_weight):
     # Transform landmarks into coordinate system of camera system
@@ -37,10 +44,13 @@ def objfun(landmarks, positions, oris_flu, cam_rotvecs, cam_ts, landmark_imcoord
     landmark_coords = camfuncs_ag.distort(landmark_coords, ks)
     landmark_coords = camfuncs_ag.ideal_to_sensor(landmark_coords, cam_matrices)
 
-    errors2d = np.abs(landmark_coords - landmark_imcoords)
+    errors2d = landmark_coords - landmark_imcoords
+
+    # Limit influence of single wrong landmarks, e.g. projected to enormous values outside the field of view
+    errors2d = cap_errors(errors2d, residual_args["error_cap"])
 
     # Apply mask weights
-    errors2d *= mask_weight
+    errors2d *= residual_args["mask_weight"]
 
     # Apply landmark weights
     errors2d *= lm_weights

@@ -1,9 +1,15 @@
 from time import time
 
 import numpy as np
+from jax.tree_util import tree_map, tree_leaves
 from scipy.sparse import csr_matrix, hstack as sparse_hstack
 
 from ..helper import get_var_edges
+
+
+def slice_residual_args(residual_args, idx):
+    # residual_args is an array or a pytree (e.g. dict) of arrays with one value per residual, shape (m, k, n, ...)
+    return tree_map(lambda a: a[idx], residual_args)
 
 
 def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> np.ndarray:
@@ -12,8 +18,9 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
     mask_free_input = args["ravel_args"]["mask_free_input"]
 
     unraveled_vars = unravel_func(free_vars, args)
-    landmarks, positions, oris_flu, cam_rotvecs, cam_ts, marker_var, lm_weights, mask_weights = unraveled_vars[:8]
-    assert isinstance(mask_weights, np.ndarray), f"mask_weights must be a numpy array, but got {type(mask_weights)}"
+    landmarks, positions, oris_flu, cam_rotvecs, cam_ts, marker_var, lm_weights, residual_args = unraveled_vars[:8]
+    assert all(isinstance(a, np.ndarray) for a in tree_leaves(residual_args)), \
+        f"residual_args must be a numpy array or a pytree of numpy arrays, but got {type(residual_args)}"
     extra_args = unraveled_vars[8:]
 
     sm, sk, sn = marker_var.shape[:3]
@@ -55,8 +62,8 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
             start_idx = i_n * element_length
             element_mask = mask[start_idx:(start_idx + element_length)]
             j = np.array(jacs[jac_idx](landmarks[(i_n,),], positions, oris_flu, cam_rotvecs, cam_ts,
-                                       marker_var[:, :, (i_n,)], lm_weights[:, :, (i_n,)], mask_weights[:, :, (i_n,)],
-                                       *extra_args))
+                                       marker_var[:, :, (i_n,)], lm_weights[:, :, (i_n,)],
+                                       slice_residual_args(residual_args, np.s_[:, :, (i_n,)]), *extra_args))
             j = j[..., element_mask]
 
             en_cols = np.sum(element_mask)
@@ -98,7 +105,8 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
                 element_mask = mask[start_idx:(start_idx + element_length)]
 
                 j = np.array(jacs[jac_idx](landmarks, positions[(i_k,),], oris_flu[(i_k,),], cam_rotvecs, cam_ts,
-                                           marker_var[:, (i_k,)], lm_weights, mask_weights[:, (i_k,)], *extra_args))
+                                           marker_var[:, (i_k,)], lm_weights,
+                                           slice_residual_args(residual_args, np.s_[:, (i_k,)]), *extra_args))
                 j = j[..., element_mask]
 
                 en_cols = np.sum(element_mask)
@@ -121,7 +129,7 @@ def objfun_jacobian_wrapper_sparse(free_vars, args, jacs, unravel_func, sd) -> n
     for jac_idx in range(3, len(jacs)):
         mask = mask_free_input[edges[jac_idx]:edges[jac_idx + 1]]
         j = np.array(jacs[jac_idx](landmarks, positions, oris_flu, cam_rotvecs, cam_ts,
-                                   marker_var, lm_weights, mask_weights, *extra_args).reshape(result_size, -1))
+                                   marker_var, lm_weights, residual_args, *extra_args).reshape(result_size, -1))
         j[np.isnan(j)] = 0  # Possibly arccos numerically > 1?
         jacs_sparse.append(csr_matrix(j[:, mask]))
 

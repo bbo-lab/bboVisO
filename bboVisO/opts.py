@@ -88,6 +88,12 @@ def default_iter_opts():
         # 'lm_close_pen_weight': penalty factor for positions close to landmarks (avoids positions falling
         # exactly on landmarks)
         'lm_close_pen_weight': 1e-1,
+        # Repro only: smoothly cap the reprojection error of single landmarks (px) to limit the influence of wrong
+        # labels. Cap per frame is max('repro_error_cap_min', 'repro_error_cap_factor' * median landmark error),
+        # computed before each least_squares run, so frames where all landmarks are off are effectively not capped.
+        # Deactivate with 'repro_error_cap_factor': -1
+        'repro_error_cap_min': 15.,
+        'repro_error_cap_factor': 2.,
         # Size of frame batches
         'frame_batch_size': int(1e6),
         # Steps of frames
